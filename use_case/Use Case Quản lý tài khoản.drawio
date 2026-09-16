@@ -1,0 +1,37 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Page-1" id="vsDHQ4BR6p0UzD7wcLIO">
+    <mxGraphModel dx="860" dy="479" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="_9y9y5y7oDOEiuHu9rMX-4" edge="1" parent="1" source="_9y9y5y7oDOEiuHu9rMX-1" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="_9y9y5y7oDOEiuHu9rMX-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="_9y9y5y7oDOEiuHu9rMX-5" edge="1" parent="1" source="_9y9y5y7oDOEiuHu9rMX-1" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="_9y9y5y7oDOEiuHu9rMX-3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="_9y9y5y7oDOEiuHu9rMX-1" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;fontSize=14;" value="Quản lý tài khoản" vertex="1">
+          <mxGeometry height="80" width="120" x="370" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="_9y9y5y7oDOEiuHu9rMX-2" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;fontSize=14;" value="Cập nhật thông tin" vertex="1">
+          <mxGeometry height="80" width="120" x="550" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="_9y9y5y7oDOEiuHu9rMX-3" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;fontSize=14;" value="Đăng xuất" vertex="1">
+          <mxGeometry height="80" width="120" x="550" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="_9y9y5y7oDOEiuHu9rMX-6" edge="1" parent="1" source="_9y9y5y7oDOEiuHu9rMX-7" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=14;" target="_9y9y5y7oDOEiuHu9rMX-8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="_9y9y5y7oDOEiuHu9rMX-7" parent="1" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fontSize=14;" value="Sinh Viên" vertex="1">
+          <mxGeometry height="60" width="30" x="50" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="_9y9y5y7oDOEiuHu9rMX-9" edge="1" parent="1" source="_9y9y5y7oDOEiuHu9rMX-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="_9y9y5y7oDOEiuHu9rMX-1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="_9y9y5y7oDOEiuHu9rMX-8" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;fontSize=14;" value="Đăng nhập" vertex="1">
+          <mxGeometry height="80" width="120" x="200" y="190" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,36 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Page-1" id="-8oHS8MrbFCzvaYrCFrL">
+    <mxGraphModel dx="860" dy="479" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="lLLB_gjARRjuHGFpvYce-1" edge="1" parent="1" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=14;" value="&amp;lt;&amp;lt;include&amp;gt;&amp;gt;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="540" y="280" as="sourcePoint" />
+            <mxPoint x="680" y="280" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lLLB_gjARRjuHGFpvYce-2" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;fontSize=14;" value="Thiết lập nhắc lịch" vertex="1">
+          <mxGeometry height="80" width="120" x="420" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="lLLB_gjARRjuHGFpvYce-3" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;fontSize=14;" value="Hệ thống thông báo lịch học" vertex="1">
+          <mxGeometry height="80" width="120" x="680" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="lLLB_gjARRjuHGFpvYce-5" edge="1" parent="1" source="lLLB_gjARRjuHGFpvYce-6" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=14;" target="lLLB_gjARRjuHGFpvYce-8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="lLLB_gjARRjuHGFpvYce-6" parent="1" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fontSize=14;" value="Sinh Viên" vertex="1">
+          <mxGeometry height="60" width="30" x="90" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="lLLB_gjARRjuHGFpvYce-7" edge="1" parent="1" source="lLLB_gjARRjuHGFpvYce-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=14;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="420" y="280" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lLLB_gjARRjuHGFpvYce-8" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;fontSize=14;" value="Đăng nhập" vertex="1">
+          <mxGeometry height="80" width="120" x="240" y="240" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
