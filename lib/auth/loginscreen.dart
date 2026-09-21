@@ -11,6 +11,23 @@ class Loginscreen extends StatefulWidget {
 class _LoginscreenState extends State<Loginscreen> {
   // Khai báo Controller để lắng nghe nội dung ô Email
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  Future<void> _LoginAcc() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+
+      // Đảm bảo widget còn tồn tại trước khi gọi SnackBar
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng nhập đầy đủ thông tin!')),
+      );
+      return;
+    }
+  }
 
   // Biến kiểm tra ô email có trống hay không
   bool _isEmailNotEmpty = false;
@@ -37,6 +54,13 @@ class _LoginscreenState extends State<Loginscreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
+          child: SingleChildScrollView(
+            child:ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: MediaQuery.of(context).size.height -
+                    MediaQuery.of(context).padding.top -
+                    MediaQuery.of(context).padding.bottom,
+              ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: Column(
@@ -115,6 +139,7 @@ class _LoginscreenState extends State<Loginscreen> {
                     ),
                     onPressed: () {
                       // Xử lý sự kiện đăng nhập ở đây
+                      _LoginAcc();
                     },
                     child: const Text(
                       'Đăng nhập',
@@ -158,6 +183,8 @@ class _LoginscreenState extends State<Loginscreen> {
               ],
             )
           ),
+            )
+          )
       ),
     );
   }
