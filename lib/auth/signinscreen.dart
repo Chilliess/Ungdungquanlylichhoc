@@ -13,6 +13,31 @@ class _SigninscreenState extends State<Signinscreen> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmpasswordController = TextEditingController();
+
+  Future<void> _signUp() async {
+    final username = _usernameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final confirmPassword = _confirmpasswordController.text.trim();
+
+    if (username.isEmpty || email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng nhập đầy đủ thông tin!')),
+      );
+      return;
+    }
+
+    if (password != confirmPassword) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mật khẩu nhập lại không khớp!')),
+      );
+      return;
+    }
+  }
 
   // Biến kiểm tra ô có trống hay không
   bool _isUsernameNotEmpty = false;
@@ -47,6 +72,7 @@ class _SigninscreenState extends State<Signinscreen> {
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmpasswordController.dispose();
     super.dispose();
   }
 
@@ -150,6 +176,7 @@ class _SigninscreenState extends State<Signinscreen> {
                   // Ô nhập lại Mật khẩu
                   TextField(
                     enabled: _isPasswordNotEmpty,
+                    controller: _confirmpasswordController,
                     obscureText: true,
                     decoration: InputDecoration(
                       hintText: 'Nhập lại Mật khẩu',
@@ -180,9 +207,10 @@ class _SigninscreenState extends State<Signinscreen> {
                         elevation: 0,
                       ),
                       onPressed: () {
-                        // Xử lý sự kiện đăng nhập ở đây
+                        // Xử lý sự kiện đăng kí ở đây
+                        _signUp();
                       },
-                      child: const Text(
+                      child: Text(
                         'Đăng kí',
                         style: TextStyle(
                           fontSize: 16,
