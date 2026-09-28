@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:untitled/auth/loginscreen.dart';
 import 'homescreen.dart';
 
 void main() {
+  Supabase.initialize(
+      url: 'https://fjwdaccejrodpcicyxrc.supabase.co',
+      anonKey: 'sb_publishable_99PN2b4I_XNZ8bf7yctZGw_M1Rl9mqs'
+  );
   runApp(const MyApp());
 }
 
