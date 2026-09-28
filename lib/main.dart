@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:untitled/auth/loginscreen.dart';
 import 'package:untitled/splash/splashscreen.dart';
-import 'homescreen.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
-void main() {
-  Supabase.initialize(
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 1. Khởi tạo dữ liệu ngôn ngữ cho intl (quan trọng để dùng 'vi_VN')
+  await initializeDateFormatting('vi_VN', null);
+  await Supabase.initialize(
       url: 'https://fjwdaccejrodpcicyxrc.supabase.co',
       anonKey: 'sb_publishable_99PN2b4I_XNZ8bf7yctZGw_M1Rl9mqs'
   );
@@ -19,11 +22,9 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
+      debugShowCheckedModeBanner: false,
+      title: 'App Lịch Học',
+      theme: ThemeData(primarySwatch: Colors.blue),
       home: Splashscreen(),
     );
   }
