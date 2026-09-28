@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:untitled/auth/loginscreen.dart';
+import 'package:untitled/splash/splashscreen.dart';
 import 'homescreen.dart';
 
 void main() {
@@ -23,7 +24,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: Loginscreen(),
+      home: Splashscreen(),
     );
   }
 }
