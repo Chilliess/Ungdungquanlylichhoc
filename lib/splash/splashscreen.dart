@@ -22,7 +22,7 @@ class _SplashscreenState extends State<Splashscreen> {
       );
     } else {
       Navigator.pushReplacement(context,
-          MaterialPageRoute(builder: (context) => MyHomePage())
+          MaterialPageRoute(builder: (context) => HomeScreen())
       );
     }
   }

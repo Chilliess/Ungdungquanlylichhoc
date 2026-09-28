@@ -23,6 +23,13 @@ class _LoginscreenState extends State<Loginscreen> {
 
     final supabase = Supabase.instance.client;
 
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng điền đầy đủ thông tin!')),
+      );
+      return;
+    }
+
     setState(() {
       loading = true;
     });
@@ -35,7 +42,7 @@ class _LoginscreenState extends State<Loginscreen> {
 
       if (result.user != null && result.session != null){
         Navigator.pushAndRemoveUntil(context, MaterialPageRoute(
-            builder: (context) => MyHomePage()
+            builder: (context) => HomeScreen()
         ), (context) => false);
       }
     } catch(e) {

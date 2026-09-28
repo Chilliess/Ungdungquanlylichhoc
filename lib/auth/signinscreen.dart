@@ -57,7 +57,7 @@ class _SigninscreenState extends State<Signinscreen> {
 
       if (result.user != null && result.session != null){
         Navigator.pushAndRemoveUntil(context, MaterialPageRoute(
-            builder: (context) => MyHomePage()
+            builder: (context) => HomeScreen()
         ), (context) => false);
       }
     } catch(e) {
