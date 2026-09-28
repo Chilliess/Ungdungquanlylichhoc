@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../homescreen.dart';
 import 'loginscreen.dart';
 
 class Signinscreen extends StatefulWidget {
@@ -15,18 +17,18 @@ class _SigninscreenState extends State<Signinscreen> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmpasswordController = TextEditingController();
 
+  bool loading = false;
+
   Future<void> _signUp() async {
     final username = _usernameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final confirmPassword = _confirmpasswordController.text.trim();
 
-    if (username.isEmpty || email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
 
-      if (!mounted) return;
-
+    if (email.isEmpty || password.isEmpty || username.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui lòng nhập đầy đủ thông tin!')),
+        const SnackBar(content: Text('Vui lòng điền đầy đủ thông tin!')),
       );
       return;
     }
@@ -36,6 +38,34 @@ class _SigninscreenState extends State<Signinscreen> {
         const SnackBar(content: Text('Mật khẩu nhập lại không khớp!')),
       );
       return;
+    }
+
+    final supabase = Supabase.instance.client;
+
+    setState(() {
+      loading = true;
+    });
+
+    try {
+      final result = await supabase.auth.signUp(
+          email: email,
+          password: password,
+          data: {
+            'username': username,
+          },
+      );
+
+      if (result.user != null && result.session != null){
+        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(
+            builder: (context) => MyHomePage()
+        ), (context) => false);
+      }
+    } catch(e) {
+      print(e.toString());
+    } finally {
+      setState(() {
+        loading = false;
+      });
     }
   }
 

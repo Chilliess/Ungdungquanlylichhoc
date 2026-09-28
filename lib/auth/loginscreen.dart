@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../homescreen.dart';
 import 'signinscreen.dart';
 
 class Loginscreen extends StatefulWidget {
@@ -13,19 +15,35 @@ class _LoginscreenState extends State<Loginscreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
+  bool loading = false;
+
   Future<void> _LoginAcc() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (email.isEmpty || password.isEmpty) {
+    final supabase = Supabase.instance.client;
 
-      // Đảm bảo widget còn tồn tại trước khi gọi SnackBar
-      if (!mounted) return;
+    setState(() {
+      loading = true;
+    });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui lòng nhập đầy đủ thông tin!')),
+    try {
+      final result = await supabase.auth.signInWithPassword(
+          email: email,
+          password: password
       );
-      return;
+
+      if (result.user != null && result.session != null){
+        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(
+            builder: (context) => MyHomePage()
+        ), (context) => false);
+      }
+    } catch(e) {
+      print(e.toString());
+    } finally {
+      setState(() {
+        loading = false;
+      });
     }
   }
 
@@ -46,6 +64,7 @@ class _LoginscreenState extends State<Loginscreen> {
   @override
   void dispose() {
     _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -107,6 +126,7 @@ class _LoginscreenState extends State<Loginscreen> {
 
                 // Ô nhập Mật khẩu
                 TextField(
+                  controller: _passwordController,
                   enabled: _isEmailNotEmpty,
                   obscureText: true,
                   decoration: InputDecoration(
@@ -129,7 +149,7 @@ class _LoginscreenState extends State<Loginscreen> {
                 SizedBox(
                   width: double.infinity,
                   height: 50,
-                  child: ElevatedButton(
+                  child: loading? Center(child: CircularProgressIndicator()):ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF4A90E2), // Màu xanh dương
                       shape: RoundedRectangleBorder(
