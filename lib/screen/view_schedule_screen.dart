@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:calendar_view/calendar_view.dart';
-import 'package:intl/intl.dart';
 
 class ViewScheduleScreen extends StatefulWidget {
   const ViewScheduleScreen({super.key});
