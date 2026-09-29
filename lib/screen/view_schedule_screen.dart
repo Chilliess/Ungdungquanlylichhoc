@@ -51,6 +51,7 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
     }
   }
 
+  // Hàm tìm kiếm
   void _onSearchChanged() {
     final keyword = _searchController.text.toLowerCase().trim();
     setState(() {
@@ -73,6 +74,7 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
     });
   }
 
+  //Hàm hiện Event
   Future<void> _loadDataFromSupabase() async {
     setState(() => _isLoading = true);
     _eventController.removeWhere((element) => true);
@@ -161,6 +163,7 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
     }
   }
 
+  // Hàm hiện thông tin chi tiết
   void _showEventDetail(CalendarEventData event) {
     final item = event.event as Map<String, dynamic>?;
     final subject = item?['subjects'] ?? {};
