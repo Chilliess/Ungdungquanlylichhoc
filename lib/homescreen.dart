@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:untitled/screen/schedule_management_screen.dart';
+import 'package:untitled/screen/subject_management_screen.dart';
+import 'package:untitled/screen/view_schedule_screen.dart';
 
 import 'auth/loginscreen.dart';
 
@@ -100,19 +103,40 @@ class _HomeScreenState extends State<HomeScreen> {
                 category: 'Lịch',
                 title: 'Xem lịch học',
                 icon: Icons.calendar_today, // Chọn icon lịch
-                onTap: () {},
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ViewScheduleScreen(),
+                    ),
+                  );
+                },
               ),
               _buildMenuCard(
                 category: 'Học tập',
                 title: 'Quản lý môn học',
                 icon: Icons.book, // Chọn icon sách môn học
-                onTap: () {},
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SubjectManagementScreen(),
+                    ),
+                  );
+                },
               ),
               _buildMenuCard(
                 category: 'Lịch',
                 title: 'Quản lý lịch học',
                 icon: Icons.schedule, // Chọn icon thời gian/lịch trình
-                onTap: () {},
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ScheduleManagementScreen(),
+                    ),
+                  );
+                },
               ),
               _buildMenuCard(
                 category: 'Nhắc nhở',
