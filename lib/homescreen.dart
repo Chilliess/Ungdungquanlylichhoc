@@ -49,7 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. Phần Chào buổi sáng + Username động từ Supabase
+              // 1. Phần Chào + Username động từ Supabase
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -65,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) {
                           return const Text(
-                            'Chào buổi sáng, đang tải...',
+                            'Xin chào, đang tải...',
                             style: TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
@@ -76,7 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                         final username = snapshot.data ?? 'User';
                         return Text(
-                          'Chào buổi sáng,\n$username', // Thay thế <username> ở đây[cite: 5]
+                          'Xin chào,\n$username', // Thay thế <username> ở đây[cite: 5]
                           style: const TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
