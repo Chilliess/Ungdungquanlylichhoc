@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:untitled/screen/schedule_announcement.dart';
 import 'package:untitled/screen/schedule_management_screen.dart';
+import 'package:untitled/screen/statistical.dart';
 import 'package:untitled/screen/subject_management_screen.dart';
 import 'package:untitled/screen/view_schedule_screen.dart';
 
@@ -156,13 +157,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 category: 'Thống kê',
                 title: 'Thống kê buổi học',
                 icon: Icons.bar_chart, // Chọn icon biểu đồ thống kê
-                onTap: () {},
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const StatisticalScreen(),
+                    ),
+                  );
+                },
               ),
               _buildMenuCard(
                 category: 'Tài khoản',
                 title: 'Quản lý tài khoản',
                 icon: Icons.person, // Chọn icon tài khoản cá nhân
-                onTap: () {},
+                onTap: () {
+
+                },
               ),
 
               ElevatedButton(
