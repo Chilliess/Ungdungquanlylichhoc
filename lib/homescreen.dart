@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:untitled/screen/schedule_announcement.dart';
 import 'package:untitled/screen/schedule_management_screen.dart';
 import 'package:untitled/screen/subject_management_screen.dart';
 import 'package:untitled/screen/view_schedule_screen.dart';
@@ -142,7 +143,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 category: 'Nhắc nhở',
                 title: 'Thiết lập nhắc nhở lịch học',
                 icon: Icons.notifications_active, // Chọn icon chuông thông báo
-                onTap: () {},
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ScheduleAnnouncementScreen(),
+                    ),
+                  );
+                },
               ),
               _buildMenuCard(
                 category: 'Thống kê',
