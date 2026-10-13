@@ -64,6 +64,6 @@ lib/
 ---
 
 ## Tác Giả & Phát Triển
-* Dự án được phát triển bởi:
+Dự án được phát triển bởi:
 * **Đỗ Việt Dũng - 23010547**.
 * **Phạm Tiến Chiêu - 23010526**.
