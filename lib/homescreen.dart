@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:untitled/screen/info_account.dart';
 import 'package:untitled/screen/schedule_announcement.dart';
 import 'package:untitled/screen/schedule_management_screen.dart';
 import 'package:untitled/screen/statistical.dart';
@@ -169,19 +170,20 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildMenuCard(
                 category: 'Tài khoản',
                 title: 'Quản lý tài khoản',
-                icon: Icons.person, // Chọn icon tài khoản cá nhân
-                onTap: () {
+                icon: Icons.person,
+                onTap: () async {
+                  // Chờ cho đến khi màn hình AccountScreen đóng lại
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AccountScreen(),
+                    ),
+                  );
 
+                  // Khi quay về, gọi setState để widget tự động build lại và gọi _fetchUsername() lấy tên mới từ DB
+                  setState(() {});
                 },
               ),
-
-              ElevatedButton(
-                onPressed: () async {
-                  await supabase.auth.signOut();
-                  Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => Loginscreen()), (value) => false);
-                },
-                child: Text('Logout')
-              )
             ],
           ),
         ),
