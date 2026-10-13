@@ -8,7 +8,6 @@ import 'package:untitled/screen/statistical.dart';
 import 'package:untitled/screen/subject_management_screen.dart';
 import 'package:untitled/screen/view_schedule_screen.dart';
 
-import 'auth/loginscreen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
