@@ -44,11 +44,22 @@ CREATE TABLE IF NOT EXISTS public.schedules (
 CREATE TABLE IF NOT EXISTS public.reminders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-    schedule_id UUID REFERENCES public.schedules(id) ON DELETE CASCADE NOT NULL,
+    schedule_id UUID NOT NULL,                        -- Không còn khóa ngoại cứng REFERENCES public.schedules(id) để chứa được cả id của lịch kiểm tra
+    schedule_type TEXT DEFAULT 'schedule' NOT NULL,   -- Phân loại: 'schedule' (lịch học) hoặc 'exam' (lịch kiểm tra)
     remind_before_minutes INT4,
     is_enabled BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Bật bảo mật RLS
+ALTER TABLE public.reminders ENABLE ROW LEVEL SECURITY;
+
+-- Tạo lại Policy bảo mật
+DROP POLICY IF EXISTS "Enable all for users based on user_id on reminders" ON public.reminders;
+CREATE POLICY "Enable all for users based on user_id on reminders"
+ON public.reminders FOR ALL
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
 
 -- ==========================================
 -- 5. BẬT BẢO MẬT HÀNG (Row Level Security - RLS) CHO TẤT CẢ CÁC BẢNG
@@ -95,5 +106,29 @@ DROP POLICY IF EXISTS "Enable all for users based on user_id on reminders" ON pu
 
 CREATE POLICY "Enable all for users based on user_id on reminders"
 ON public.reminders FOR ALL
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
+
+-- Tạo bảng schedule_exams chuyên biệt cho lịch kiểm tra / thi cử
+CREATE TABLE IF NOT EXISTS public.schedule_exams (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    subject_id UUID REFERENCES public.subjects(id) ON DELETE CASCADE NOT NULL,
+    room TEXT,
+    supervisor TEXT,                  -- Tên giảng viên coi thi / giám thị
+    exam_date DATE NOT NULL,          -- Ngày thi cụ thể
+    start_time TIME NOT NULL,         -- Giờ bắt đầu
+    end_time TIME NOT NULL,           -- Giờ kết thúc
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Bật bảo mật RLS
+ALTER TABLE public.schedule_exams ENABLE ROW LEVEL SECURITY;
+
+-- Thiết lập Policy quyền cho phép user tự quản lý lịch thi của chính họ
+DROP POLICY IF EXISTS "Enable all for users based on user_id on schedule_exams" ON public.schedule_exams;
+
+CREATE POLICY "Enable all for users based on user_id on schedule_exams"
+ON public.schedule_exams FOR ALL
 USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);

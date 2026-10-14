@@ -103,7 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // 2. Các nút chức năng theo giao diện mẫu của bạn
               _buildMenuCard(
                 category: 'Lịch',
-                title: 'Xem lịch học',
+                title: 'Xem lịch học/lịch thi',
                 icon: Icons.calendar_today, // Chọn icon lịch
                 onTap: () {
                   Navigator.push(
@@ -129,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               _buildMenuCard(
                 category: 'Lịch',
-                title: 'Quản lý lịch học',
+                title: 'Quản lý lịch học/lịch thi',
                 icon: Icons.schedule, // Chọn icon thời gian/lịch trình
                 onTap: () {
                   Navigator.push(
@@ -142,7 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               _buildMenuCard(
                 category: 'Nhắc nhở',
-                title: 'Thiết lập nhắc nhở lịch học',
+                title: 'Thiết lập nhắc nhở lịch',
                 icon: Icons.notifications_active, // Chọn icon chuông thông báo
                 onTap: () {
                   Navigator.push(

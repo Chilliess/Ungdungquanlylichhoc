@@ -25,53 +25,84 @@ class _SessionGroup {
   });
 }
 
-class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
+class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> with SingleTickerProviderStateMixin {
   final SupabaseClient supabase = Supabase.instance.client;
 
   List<Map<String, dynamic>> _schedules = [];
-  List<Map<String, dynamic>> _filteredSchedules = []; // Danh sách sau khi tìm kiếm
+  List<Map<String, dynamic>> _exams = [];
+  List<Map<String, dynamic>> _filteredSchedules = [];
+  List<Map<String, dynamic>> _filteredExams = [];
   List<Map<String, dynamic>> _subjects = [];
   bool _isLoading = true;
 
+  late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        _onSearchChanged();
+      }
+    });
     _fetchData();
     _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  // Hàm lọc tìm kiếm
+  // Hàm lọc tìm kiếm cho cả 2 tab
   void _onSearchChanged() {
     final keyword = _searchController.text.toLowerCase().trim();
-    setState(() {
-      if (keyword.isEmpty) {
-        _filteredSchedules = List.from(_schedules);
-      } else {
-        _filteredSchedules = _schedules.where((item) {
-          final subject = item['subjects'] ?? {};
-          final subjectName = (subject['subject_name'] ?? '').toString().toLowerCase();
-          final subjectCode = (subject['subject_code'] ?? '').toString().toLowerCase();
-          final room = (item['room'] ?? '').toString().toLowerCase();
-          final lecturer = (item['lecturer'] ?? '').toString().toLowerCase();
+    final isExamTab = _tabController.index == 1;
 
-          return subjectName.contains(keyword) ||
-              subjectCode.contains(keyword) ||
-              room.contains(keyword) ||
-              lecturer.contains(keyword);
-        }).toList();
+    setState(() {
+      if (isExamTab) {
+        if (keyword.isEmpty) {
+          _filteredExams = List.from(_exams);
+        } else {
+          _filteredExams = _exams.where((item) {
+            final subject = item['subjects'] ?? {};
+            final subjectName = (subject['subject_name'] ?? '').toString().toLowerCase();
+            final subjectCode = (subject['subject_code'] ?? '').toString().toLowerCase();
+            final room = (item['room'] ?? '').toString().toLowerCase();
+            final supervisor = (item['supervisor'] ?? '').toString().toLowerCase();
+
+            return subjectName.contains(keyword) ||
+                subjectCode.contains(keyword) ||
+                room.contains(keyword) ||
+                supervisor.contains(keyword);
+          }).toList();
+        }
+      } else {
+        if (keyword.isEmpty) {
+          _filteredSchedules = List.from(_schedules);
+        } else {
+          _filteredSchedules = _schedules.where((item) {
+            final subject = item['subjects'] ?? {};
+            final subjectName = (subject['subject_name'] ?? '').toString().toLowerCase();
+            final subjectCode = (subject['subject_code'] ?? '').toString().toLowerCase();
+            final room = (item['room'] ?? '').toString().toLowerCase();
+            final lecturer = (item['lecturer'] ?? '').toString().toLowerCase();
+
+            return subjectName.contains(keyword) ||
+                subjectCode.contains(keyword) ||
+                room.contains(keyword) ||
+                lecturer.contains(keyword);
+          }).toList();
+        }
       }
     });
   }
 
-  // Phần hiện các lịch học
+  // Tải dữ liệu song song từ cả 2 bảng schedules và schedule_exams
   Future<void> _fetchData() async {
     try {
       setState(() => _isLoading = true);
@@ -88,10 +119,15 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
           .select('*, subjects(subject_code, subject_name, color_code)')
           .eq('user_id', userId);
 
+      final examRes = await supabase
+          .from('schedule_exams')
+          .select('*, subjects(subject_code, subject_name, color_code)')
+          .eq('user_id', userId);
+
       setState(() {
         _subjects = List<Map<String, dynamic>>.from(subjectRes);
         _schedules = List<Map<String, dynamic>>.from(scheduleRes);
-        // Cập nhật lại danh sách lọc theo từ khóa hiện tại (nếu có)
+        _exams = List<Map<String, dynamic>>.from(examRes);
         _onSearchChanged();
         _isLoading = false;
       });
@@ -103,7 +139,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
     }
   }
 
-  // Kiểm tra nếu trùng lịch
+  // Hàm kiểm tra trùng lịch học định kỳ (Kiểm tra cả với lịch học khác VÀ với lịch kiểm tra)
   String? _checkConflictWithExisting({
     required List<int> newDays,
     required TimeOfDay newStart,
@@ -122,6 +158,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
       return 'Ngày bắt đầu không được lớn hơn ngày kết thúc!';
     }
 
+    // 1. Kiểm tra trùng với các lịch học khác (_schedules)
     for (var existing in _schedules) {
       if (editingScheduleId != null && existing['id'].toString() == editingScheduleId) {
         continue;
@@ -153,13 +190,114 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
 
       if (isTimeOverlap) {
         final subName = existing['subjects']?['subject_name'] ?? 'Môn học khác';
-        return 'Bị trùng lịch với môn "$subName" vào khung giờ ${existing['start_time']} - ${existing['end_time']}!';
+        return 'Bị trùng lịch với môn học "$subName" vào khung giờ ${existing['start_time']} - ${existing['end_time']}!';
       }
     }
+
+    // 2. Kiểm tra trùng với các lịch kiểm tra đã có (_exams)
+    for (var exam in _exams) {
+      if (exam['exam_date'] != null && exam['start_time'] != null && exam['end_time'] != null) {
+        DateTime examDate = DateTime.parse(exam['exam_date']);
+
+        bool isDateInRange = !examDate.isBefore(newStartDate) && !examDate.isAfter(newEndDate);
+        if (!isDateInRange) continue;
+
+        int examDayOfWeek = examDate.weekday == 7 ? 8 : examDate.weekday + 1;
+        if (!newDays.contains(examDayOfWeek)) continue;
+
+        final startParts = exam['start_time'].toString().split(':');
+        final endParts = exam['end_time'].toString().split(':');
+
+        int exStartMinutes = int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
+        int exEndMinutes = int.parse(endParts[0]) * 60 + int.parse(endParts[1]);
+
+        bool isTimeOverlap = (newStartMinutes < exEndMinutes) && (newEndMinutes > exStartMinutes);
+
+        if (isTimeOverlap) {
+          final subName = exam['subjects']?['subject_name'] ?? 'Môn học';
+          String formattedExamDate = DateFormat('dd/MM/yyyy').format(examDate);
+          return 'Bị trùng lịch với lịch kiểm tra môn "$subName" vào ngày $formattedExamDate (${exam['start_time']} - ${exam['end_time']})!';
+        }
+      }
+    }
+
     return null;
   }
 
-  // Hàm hiện phần Thêm / Sửa
+  // Hàm kiểm tra trùng lịch kiểm tra mới với lịch học và lịch kiểm tra khác
+  String? _checkExamConflict({
+    required DateTime examDate,
+    required TimeOfDay newStart,
+    required TimeOfDay newEnd,
+  }) {
+    int newStartMinutes = newStart.hour * 60 + newStart.minute;
+    int newEndMinutes = newEnd.hour * 60 + newEnd.minute;
+
+    if (newStartMinutes >= newEndMinutes) {
+      return 'Giờ kết thúc phải lớn hơn giờ bắt đầu!';
+    }
+
+    // 1. Kiểm tra trùng với lịch học định kỳ (_schedules)
+    for (var schedule in _schedules) {
+      if (schedule['start_date'] != null && schedule['end_date'] != null) {
+        DateTime sDate = DateTime.parse(schedule['start_date']);
+        DateTime eDate = DateTime.parse(schedule['end_date']);
+
+        bool isDateInRange = !examDate.isBefore(sDate) && !examDate.isAfter(eDate);
+        if (!isDateInRange) continue;
+
+        List<dynamic> rawDays = schedule['day_of_week'] is List ? schedule['day_of_week'] : [schedule['day_of_week']];
+        List<int> scheduleDays = rawDays.map((d) => int.tryParse(d.toString()) ?? 2).toList();
+
+        int examDayOfWeek = examDate.weekday == 7 ? 8 : examDate.weekday + 1;
+        if (!scheduleDays.contains(examDayOfWeek)) continue;
+
+        if (schedule['start_time'] != null && schedule['end_time'] != null) {
+          final startParts = schedule['start_time'].toString().split(':');
+          final endParts = schedule['end_time'].toString().split(':');
+
+          int exStartMinutes = int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
+          int exEndMinutes = int.parse(endParts[0]) * 60 + int.parse(endParts[1]);
+
+          bool isTimeOverlap = (newStartMinutes < exEndMinutes) && (newEndMinutes > exStartMinutes);
+          if (isTimeOverlap) {
+            final subName = schedule['subjects']?['subject_name'] ?? 'Môn học';
+            return 'Trùng lịch với lịch học môn "$subName" vào khung giờ ${schedule['start_time']} - ${schedule['end_time']}!';
+          }
+        }
+      }
+    }
+
+    // 2. Kiểm tra trùng với các lịch kiểm tra khác (_exams)
+    for (var existingExam in _exams) {
+      if (existingExam['exam_date'] != null) {
+        DateTime existingDate = DateTime.parse(existingExam['exam_date']);
+
+        if (existingDate.year == examDate.year &&
+            existingDate.month == examDate.month &&
+            existingDate.day == examDate.day) {
+
+          if (existingExam['start_time'] != null && existingExam['end_time'] != null) {
+            final startParts = existingExam['start_time'].toString().split(':');
+            final endParts = existingExam['end_time'].toString().split(':');
+
+            int exStartMinutes = int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
+            int exEndMinutes = int.parse(endParts[0]) * 60 + int.parse(endParts[1]);
+
+            bool isTimeOverlap = (newStartMinutes < exEndMinutes) && (newEndMinutes > exStartMinutes);
+            if (isTimeOverlap) {
+              final subName = existingExam['subjects']?['subject_name'] ?? 'Môn học';
+              return 'Trùng lịch với một bài kiểm tra khác ("$subName") vào cùng ngày!';
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  // Dialog thêm lịch học
   void _showScheduleDialog({Map<String, dynamic>? schedule}) {
     if (_subjects.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -226,7 +364,6 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
       2: 'T2', 3: 'T3', 4: 'T4', 5: 'T5', 6: 'T6', 7: 'T7', 8: 'CN',
     };
 
-    // Giao diện phần Thêm / Sửa
     showDialog(
       context: context,
       builder: (context) {
@@ -263,7 +400,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
                       const SizedBox(height: 10),
                       TextField(
                         controller: roomController,
-                        decoration: const InputDecoration(labelText: 'Phòng học chung (VD: P.402 A2)', border: OutlineInputBorder(), isDense: true),
+                        decoration: const InputDecoration(labelText: 'Phòng học (VD: P.402 A2)', border: OutlineInputBorder(), isDense: true),
                       ),
                       const SizedBox(height: 10),
                       TextField(
@@ -349,10 +486,6 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
                                             } else {
                                               if (group.daysOfWeek.length > 1) {
                                                 group.daysOfWeek.remove(dayKey);
-                                              } else {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(content: Text('Cần chọn ít nhất 1 ngày!'), duration: Duration(milliseconds: 600)),
-                                                );
                                               }
                                             }
                                           });
@@ -496,11 +629,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
 
                       if (conflictError != null) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(conflictError),
-                            backgroundColor: Colors.red,
-                            duration: const Duration(seconds: 3),
-                          ),
+                          SnackBar(content: Text(conflictError), backgroundColor: Colors.red, duration: const Duration(seconds: 3)),
                         );
                         return;
                       }
@@ -575,7 +704,172 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
     );
   }
 
-  // Hàm xóa lịch
+  // Dialog thêm lịch kiểm tra (Lưu vào bảng schedule_exams mới)
+  void _showExamScheduleDialog() {
+    if (_subjects.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bạn cần tạo Môn học trước khi thêm lịch kiểm tra!')),
+      );
+      return;
+    }
+
+    String? selectedSubjectId = _subjects.first['id'];
+    final roomController = TextEditingController();
+    final supervisorController = TextEditingController();
+
+    DateTime selectedDate = DateTime.now();
+    TimeOfDay startTime = const TimeOfDay(hour: 8, minute: 0);
+    TimeOfDay endTime = const TimeOfDay(hour: 10, minute: 0);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Thêm lịch kiểm tra'),
+              content: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.9,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Chọn môn học:', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      DropdownButtonFormField<String>(
+                        value: selectedSubjectId,
+                        isExpanded: true,
+                        items: _subjects.map((sub) {
+                          return DropdownMenuItem<String>(
+                            value: sub['id'].toString(),
+                            child: Text(
+                              '${sub['subject_code']} - ${sub['subject_name']}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setDialogState(() => selectedSubjectId = val);
+                        },
+                        decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: roomController,
+                        decoration: const InputDecoration(labelText: 'Phòng thi (VD: P.301)', border: OutlineInputBorder(), isDense: true),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: supervisorController,
+                        decoration: const InputDecoration(labelText: 'Giảng viên coi thi', border: OutlineInputBorder(), isDense: true),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.calendar_today),
+                        label: Text('Ngày thi: ${DateFormat('dd/MM/yyyy').format(selectedDate)}'),
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDate,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2030),
+                          );
+                          if (picked != null) {
+                            setDialogState(() => selectedDate = picked);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () async {
+                                final picked = await showTimePicker(context: context, initialTime: startTime);
+                                if (picked != null) {
+                                  setDialogState(() => startTime = picked);
+                                }
+                              },
+                              child: Text('BĐ: ${startTime.format(context)}'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () async {
+                                final picked = await showTimePicker(context: context, initialTime: endTime);
+                                if (picked != null) {
+                                  setDialogState(() => endTime = picked);
+                                }
+                              },
+                              child: Text('KT: ${endTime.format(context)}'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Hủy')),
+                ElevatedButton(
+                  onPressed: () async {
+                    final userId = supabase.auth.currentUser?.id;
+                    if (userId == null || selectedSubjectId == null) return;
+
+                    // Kiểm tra trùng lịch trước khi lưu
+                    String? conflictError = _checkExamConflict(
+                      examDate: selectedDate,
+                      newStart: startTime,
+                      newEnd: endTime,
+                    );
+
+                    if (conflictError != null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(conflictError), backgroundColor: Colors.red),
+                      );
+                      return;
+                    }
+
+                    final formattedDate = DateFormat('yyyy-MM-dd').format(selectedDate);
+                    final formattedStartTime = '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}:00';
+                    final formattedEndTime = '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}:00';
+
+                    try {
+                      await supabase.from('schedule_exams').insert({
+                        'user_id': userId,
+                        'subject_id': selectedSubjectId,
+                        'room': roomController.text.trim(),
+                        'supervisor': supervisorController.text.trim(),
+                        'exam_date': formattedDate,
+                        'start_time': formattedStartTime,
+                        'end_time': formattedEndTime,
+                      });
+
+                      if (mounted) {
+                        Navigator.pop(context);
+                        _fetchData();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Đã thêm lịch kiểm tra thành công!'), backgroundColor: Colors.green),
+                        );
+                      }
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+                    }
+                  },
+                  child: const Text('Thêm lịch kiểm tra'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Hàm xóa lịch học
   void _deleteSchedule(String scheduleId) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -604,7 +898,35 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
     }
   }
 
-  // Phần hiện thứ
+  // Hàm xóa lịch kiểm tra
+  void _deleteExam(String examId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xác nhận xóa'),
+        content: const Text('Bạn có chắc chắn muốn xóa lịch kiểm tra này không?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Xóa', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await supabase.from('schedule_exams').delete().eq('id', examId);
+        _fetchData();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã xóa lịch kiểm tra!')));
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi xóa: $e')));
+      }
+    }
+  }
+
   String _formatDaysOfWeek(dynamic rawDays) {
     if (rawDays == null) return 'Chưa rõ thứ';
     List<dynamic> list = rawDays is List ? rawDays : [rawDays];
@@ -615,23 +937,32 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isExamTab = _tabController.index == 1;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Quản lý Lịch học'),
+        title: const Text('Quản lý Lịch học & Kiểm tra'),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: Colors.blueAccent,
+          unselectedLabelColor: Colors.grey,
+          indicatorColor: Colors.blueAccent,
+          tabs: const [
+            Tab(text: 'Lịch học'),
+            Tab(text: 'Lịch kiểm tra'),
+          ],
+        ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
+      body: Column(
         children: [
-          // Thanh tìm kiếm
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Tìm theo tên môn, mã môn, phòng, GV...',
+                hintText: isExamTab ? 'Tìm theo tên môn, phòng thi, giám thị...' : 'Tìm theo tên môn, mã môn, phòng, GV...',
                 prefixIcon: const Icon(Icons.search, color: Colors.blueAccent),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
@@ -646,64 +977,115 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
               ),
             ),
           ),
-
-          // Danh sách lịch học đã lọc
           Expanded(
-            child: _filteredSchedules.isEmpty
-                ? const Center(child: Text('Không tìm thấy lịch học phù hợp.'))
-                : ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: _filteredSchedules.length,
-              itemBuilder: (context, index) {
-                final item = _filteredSchedules[index];
-                final subject = item['subjects'] ?? {};
-                final daysText = _formatDaysOfWeek(item['day_of_week']);
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : TabBarView(
+              controller: _tabController,
+              children: [
+                // TAB 0: LỊCH HỌC (Lấy từ bảng schedules)
+                _filteredSchedules.isEmpty
+                    ? const Center(child: Text('Không tìm thấy lịch học phù hợp.'))
+                    : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: _filteredSchedules.length,
+                  itemBuilder: (context, index) {
+                    final item = _filteredSchedules[index];
+                    final subject = item['subjects'] ?? {};
+                    final daysText = _formatDaysOfWeek(item['day_of_week']);
 
-                String dateRangeStr = '';
-                if (item['start_date'] != null && item['end_date'] != null) {
-                  try {
-                    final sDate = DateFormat('dd/MM/yyyy').format(DateTime.parse(item['start_date']));
-                    final eDate = DateFormat('dd/MM/yyyy').format(DateTime.parse(item['end_date']));
-                    dateRangeStr = '\nThời gian: $sDate đến $eDate';
-                  } catch (_) {}
-                }
+                    String dateRangeStr = '';
+                    if (item['start_date'] != null && item['end_date'] != null) {
+                      try {
+                        final sDate = DateFormat('dd/MM/yyyy').format(DateTime.parse(item['start_date']));
+                        final eDate = DateFormat('dd/MM/yyyy').format(DateTime.parse(item['end_date']));
+                        dateRangeStr = '\nThời gian: $sDate đến $eDate';
+                      } catch (_) {}
+                    }
 
-                return Card(
-                  elevation: 3,
-                  margin: const EdgeInsets.symmetric(vertical: 6),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  child: ListTile(
-                    title: Text(
-                      subject['subject_name'] ?? 'Môn học',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent),
-                    ),
-                    subtitle: Text(
-                      'Mã: ${subject['subject_code'] ?? 'N/A'}\nThứ: [$daysText] • ${item['start_time']} - ${item['end_time']}\nPhòng: ${item['room']} • GV: ${item['lecturer']}$dateRangeStr',
-                    ),
-                    isThreeLine: true,
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.blue),
-                          onPressed: () => _showScheduleDialog(schedule: item),
+                    return Card(
+                      elevation: 3,
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      child: ListTile(
+                        title: Text(
+                          subject['subject_name'] ?? 'Môn học',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent),
                         ),
-                        IconButton(
+                        subtitle: Text(
+                          'Mã: ${subject['subject_code'] ?? 'N/A'}\nThứ: [$daysText] • ${item['start_time']} - ${item['end_time']}\nPhòng: ${item['room']} • GV: ${item['lecturer']}$dateRangeStr',
+                        ),
+                        isThreeLine: true,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.blue),
+                              onPressed: () => _showScheduleDialog(schedule: item),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _deleteSchedule(item['id']),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+                // TAB 1: LỊCH KIỂM TRA (Lấy từ bảng schedule_exams)
+                _filteredExams.isEmpty
+                    ? const Center(child: Text('Không tìm thấy lịch kiểm tra phù hợp.'))
+                    : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: _filteredExams.length,
+                  itemBuilder: (context, index) {
+                    final item = _filteredExams[index];
+                    final subject = item['subjects'] ?? {};
+
+                    String examDateStr = '';
+                    if (item['exam_date'] != null) {
+                      try {
+                        examDateStr = DateFormat('dd/MM/yyyy').format(DateTime.parse(item['exam_date']));
+                      } catch (_) {}
+                    }
+
+                    return Card(
+                      elevation: 3,
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      child: ListTile(
+                        title: Text(
+                          'Kiểm tra: ${subject['subject_name'] ?? 'Môn học'}',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade800),
+                        ),
+                        subtitle: Text(
+                          'Mã: ${subject['subject_code'] ?? 'N/A'}\nNgày thi: $examDateStr • ${item['start_time']} - ${item['end_time']}\nPhòng thi: ${item['room']} • Giám thị: ${item['supervisor']}',
+                        ),
+                        isThreeLine: true,
+                        trailing: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _deleteSchedule(item['id']),
+                          onPressed: () => _deleteExam(item['id']),
                         ),
-                      ],
-                    ),
-                  ),
-                );
-              },
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showScheduleDialog(),
-        backgroundColor: Colors.blueAccent,
+        onPressed: () {
+          if (_tabController.index == 0) {
+            _showScheduleDialog();
+          } else {
+            _showExamScheduleDialog();
+          }
+        },
+        backgroundColor: _tabController.index == 0 ? Colors.blueAccent : Colors.orange,
         child: const Icon(Icons.add, color: Colors.white, size: 28),
       ),
     );
