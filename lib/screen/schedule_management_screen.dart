@@ -890,6 +890,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> wit
     if (confirm == true) {
       try {
         await supabase.from('schedules').delete().eq('id', scheduleId);
+        await supabase.from('reminders').delete().eq('schedule_id', scheduleId).eq('schedule_type', 'schedule');
         _fetchData();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã xóa lịch học!')));
       } catch (e) {
@@ -919,6 +920,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> wit
     if (confirm == true) {
       try {
         await supabase.from('schedule_exams').delete().eq('id', examId);
+        await supabase.from('reminders').delete().eq('schedule_id', examId).eq('schedule_type', 'exam');
         _fetchData();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã xóa lịch kiểm tra!')));
       } catch (e) {
