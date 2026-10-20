@@ -238,10 +238,10 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20, color: Colors.grey[600]),
+        Icon(icon, size: 20, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black),
         const SizedBox(width: 8),
-        Text('$label ', style: const TextStyle(fontWeight: FontWeight.w600)),
-        Expanded(child: Text(value, style: TextStyle(color: Colors.grey[800]))),
+        Text('$label ', style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black)),
+        Expanded(child: Text(value, style: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black))),
       ],
     );
   }
