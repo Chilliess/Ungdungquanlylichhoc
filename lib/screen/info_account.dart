@@ -117,41 +117,6 @@ class _AccountScreenState extends State<AccountScreen> {
     }
   }
 
-  // Chức năng đăng xuất
-  Future<void> _signOut() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Đăng xuất'),
-        content: const Text('Bạn có chắc chắn muốn đăng xuất khỏi tài khoản không?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Hủy'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Đăng xuất'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      try {
-        await supabase.auth.signOut();
-        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => Loginscreen()), (value) => false);
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Lỗi đăng xuất: $e'), backgroundColor: Colors.red),
-          );
-        }
-      }
-    }
-  }
-
   @override
   void dispose() {
     _usernameController.dispose();
@@ -186,10 +151,10 @@ class _AccountScreenState extends State<AccountScreen> {
               const SizedBox(height: 24),
 
               // Tên người dùng (Username)
+              Text('Tên người dùng'),
               TextFormField(
                 controller: _usernameController,
                 decoration: const InputDecoration(
-                  labelText: 'Tên người dùng',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.person_outline),
                 ),
@@ -203,12 +168,12 @@ class _AccountScreenState extends State<AccountScreen> {
               const SizedBox(height: 16),
 
               // Email đăng nhập
+              Text('Email đăng nhập (Không thể thay đổi)'),
               TextFormField(
                 controller: _emailController,
                 readOnly: true,
                 style: const TextStyle(color: Colors.black87), // Màu chữ hiển thị rõ ràng, sắc nét
                 decoration: InputDecoration(
-                  labelText: 'Email đăng nhập (Không thể thay đổi)',
                   labelStyle: const TextStyle(color: Colors.grey, fontSize: 14),
                   prefixIcon: const Icon(Icons.email_outlined, color: Colors.grey),
                   filled: true,
@@ -228,12 +193,11 @@ class _AccountScreenState extends State<AccountScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-
               // Mật khẩu mới (Để trống nếu không muốn đổi)
+              Text('Mật khẩu mới (để trống nếu giữ nguyên)'),
               TextFormField(
                 controller: _passwordController,
                 decoration: const InputDecoration(
-                  labelText: 'Mật khẩu mới (để trống nếu giữ nguyên)',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.lock_outline),
                 ),
@@ -262,17 +226,6 @@ class _AccountScreenState extends State<AccountScreen> {
                     : const Text('Lưu thay đổi', style: TextStyle(fontSize: 16)),
               ),
               const SizedBox(height: 16),
-
-              // Nút Đăng xuất
-              OutlinedButton.icon(
-                onPressed: _isLoading ? null : _signOut,
-                icon: const Icon(Icons.logout, color: Colors.red),
-                label: const Text('Đăng xuất', style: TextStyle(color: Colors.red)),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  side: const BorderSide(color: Colors.red),
-                ),
-              ),
             ],
           ),
         ),

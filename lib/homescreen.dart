@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:untitled/screen/info_account.dart';
 import 'package:untitled/screen/schedule_announcement.dart';
 import 'package:untitled/screen/schedule_management_screen.dart';
+import 'package:untitled/screen/settings.dart';
 import 'package:untitled/screen/statistical.dart';
 import 'package:untitled/screen/subject_management_screen.dart';
 import 'package:untitled/screen/view_schedule_screen.dart';
@@ -44,7 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -183,6 +184,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   setState(() {});
                 },
               ),
+
+              _buildMenuCard(
+                category: 'Cài đặt',
+                title: 'Cài đặt chung',
+                icon: Icons.settings,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -201,9 +214,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).scaffoldBackgroundColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.black87, width: 1.5),
+        border: Border.all(color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black, width: 1.5),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -219,12 +232,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     category,
-                    style: const TextStyle(fontSize: 14, color: Colors.black54),
+                    style: TextStyle(fontSize: 14, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     title,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black),
                   ),
                 ],
               ),

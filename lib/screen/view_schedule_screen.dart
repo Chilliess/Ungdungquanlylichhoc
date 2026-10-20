@@ -16,8 +16,10 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
   late final EventController _eventController;
 
   late TabController _tabController;
+  List<Map<String, dynamic>> _allItems = [];
 
-  List<Map<String, dynamic>> _allItems = []; // Gộp cả lịch học và lịch kiểm tra cho phần tìm kiếm
+  // Quản lý ngày đang hiển thị trên tiêu đề tùy chỉnh
+  DateTime _currentDisplayDate = DateTime.now();
 
   @override
   void initState() {
@@ -34,7 +36,6 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
     super.dispose();
   }
 
-  // Hàm chuyển đổi mã Hex sang Color
   Color _getColorFromHex(String? hexString) {
     if (hexString == null || hexString.isEmpty) return Colors.blueAccent;
     try {
@@ -47,7 +48,6 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
     }
   }
 
-  // Tải dữ liệu từ cả 2 bảng schedules và schedule_exams
   Future<void> _loadDataFromSupabase() async {
     setState(() => _isLoading = true);
     _eventController.removeWhere((element) => true);
@@ -59,13 +59,11 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
         return;
       }
 
-      // 1. Lấy lịch học định kỳ
       final scheduleRes = await supabase
           .from('schedules')
           .select('*, subjects(subject_code, subject_name, color_code)')
           .eq('user_id', userId);
 
-      // 2. Lấy lịch kiểm tra từ bảng mới schedule_exams
       final examRes = await supabase
           .from('schedule_exams')
           .select('*, subjects(subject_code, subject_name, color_code)')
@@ -74,7 +72,6 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
       List<Map<String, dynamic>> combinedItems = [];
       List<CalendarEventData> events = [];
 
-      // Xử lý đưa Lịch học vào danh sách sự kiện
       for (var item in scheduleRes) {
         var mapItem = Map<String, dynamic>.from(item);
         mapItem['is_exam'] = false;
@@ -129,7 +126,6 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
         }
       }
 
-      // Xử lý đưa Lịch kiểm tra vào danh sách sự kiện
       for (var item in examRes) {
         var mapItem = Map<String, dynamic>.from(item);
         mapItem['is_exam'] = true;
@@ -156,7 +152,7 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
             date: examDate,
             startTime: startTime,
             endTime: endTime,
-            color: Colors.orange, // Lịch kiểm tra dùng màu cam nổi bật
+            color: Colors.orange,
             description: 'Phòng thi: $room\nGiảng viên coi thi: $supervisor\nThời gian: $startTimeStr - $endTimeStr',
             event: mapItem,
           ),
@@ -179,7 +175,6 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
     }
   }
 
-  // Hàm hiện thông tin chi tiết khi bấm vào sự kiện trên lịch
   void _showEventDetail(CalendarEventData event) {
     final item = event.event as Map<String, dynamic>?;
     final subject = item?['subjects'] ?? {};
@@ -196,10 +191,7 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            Icon(
-              isExam ? Icons.assignment_turned_in : Icons.book,
-              color: event.color,
-            ),
+            Icon(isExam ? Icons.assignment_turned_in : Icons.book, color: event.color),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -219,17 +211,9 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
           children: [
             _buildDetailRow(Icons.code, 'Mã môn học:', subject['subject_code'] ?? 'N/A'),
             const SizedBox(height: 10),
-            _buildDetailRow(
-              Icons.room,
-              isExam ? 'Phòng thi:' : 'Phòng học:',
-              room,
-            ),
+            _buildDetailRow(Icons.room, isExam ? 'Phòng thi:' : 'Phòng học:', room),
             const SizedBox(height: 10),
-            _buildDetailRow(
-              Icons.person,
-              isExam ? 'Giảng viên coi thi:' : 'Giảng viên:',
-              person,
-            ),
+            _buildDetailRow(Icons.person, isExam ? 'Giảng viên coi thi:' : 'Giảng viên:', person),
             const SizedBox(height: 10),
             _buildDetailRow(
               Icons.access_time,
@@ -257,22 +241,22 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
         Icon(icon, size: 20, color: Colors.grey[600]),
         const SizedBox(width: 8),
         Text('$label ', style: const TextStyle(fontWeight: FontWeight.w600)),
-        Expanded(
-          child: Text(value, style: TextStyle(color: Colors.grey[800])),
-        ),
+        Expanded(child: Text(value, style: TextStyle(color: Colors.grey[800]))),
       ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return CalendarControllerProvider(
       controller: _eventController,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Xem lịch học & kiểm tra'),
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          foregroundColor: isDark ? Colors.white : Colors.black,
           actions: [
             IconButton(
               icon: const Icon(Icons.refresh),
@@ -295,7 +279,7 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
             : TabBarView(
           controller: _tabController,
           children: [
-            // Tab 1: Xem theo tuần
+            // TAB 1: TUẦN
             WeekView(
               onEventTap: (events, date) {
                 if (events.isNotEmpty) {
@@ -306,13 +290,40 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
               maxDay: DateTime(2100),
               initialDay: DateTime.now(),
               timeLineWidth: 60,
+              backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
+              headerStyle: HeaderStyle(
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1F1F1F) : const Color(0xFFE3F2FD), // Màu nền thanh ngày tháng
+                ),
+                headerTextStyle: TextStyle(
+                  color: isDark ? Colors.white : Colors.blue.shade900, // Màu chữ ngày tháng
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+                leftIconVisible: true,
+                rightIconVisible: true,
+                leftIcon: Icon(
+                  Icons.chevron_left,
+                  color: isDark ? Colors.white : Colors.black, // Màu nút mũi tên trái
+                ),
+                rightIcon: Icon(
+                  Icons.chevron_right,
+                  color: isDark ? Colors.white : Colors.black, // Màu nút mũi tên phải
+                ),
+              ),
+
+              hourIndicatorSettings: HourIndicatorSettings(
+                color: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+                height: 1.0,
+                lineStyle: LineStyle.dashed,
+              ),
               liveTimeIndicatorSettings: const LiveTimeIndicatorSettings(
                 color: Colors.red,
                 showTime: true,
               ),
             ),
 
-            // Tab 2: Xem theo ngày
+            // TAB 2: NGÀY
             DayView(
               onEventTap: (events, date) {
                 if (events.isNotEmpty) {
@@ -323,6 +334,24 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen> with SingleTick
               maxDay: DateTime(2100),
               initialDay: DateTime.now(),
               timeLineWidth: 60,
+              backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
+              headerStyle: HeaderStyle(
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1F1F1F) : const Color(0xFFE3F2FD),
+                ),
+                headerTextStyle: TextStyle(
+                  color: isDark ? Colors.white : Colors.blue.shade900,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+                leftIcon: Icon(Icons.chevron_left, color: isDark ? Colors.white : Colors.black),
+                rightIcon: Icon(Icons.chevron_right, color: isDark ? Colors.white : Colors.black),
+              ),
+              hourIndicatorSettings: HourIndicatorSettings(
+                color: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+                height: 1.0,
+                lineStyle: LineStyle.dashed,
+              ),
               liveTimeIndicatorSettings: const LiveTimeIndicatorSettings(
                 color: Colors.red,
                 showTime: true,

@@ -940,12 +940,13 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> wit
   @override
   Widget build(BuildContext context) {
     final isExamTab = _tabController.index == 1;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Quản lý Lịch học & Kiểm tra'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        foregroundColor: isDark ? Colors.white : Colors.black,
         bottom: TabBar(
           controller: _tabController,
           labelColor: Colors.blueAccent,
@@ -963,18 +964,52 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> wit
             padding: const EdgeInsets.all(12.0),
             child: TextField(
               controller: _searchController,
+              style: TextStyle(
+                color: isDark ? Colors.white : Colors.black87, // Màu chữ khi gõ
+              ),
               decoration: InputDecoration(
-                hintText: isExamTab ? 'Tìm theo tên môn, phòng thi, giám thị...' : 'Tìm theo tên môn, mã môn, phòng, GV...',
-                prefixIcon: const Icon(Icons.search, color: Colors.blueAccent),
+                hintText: isExamTab
+                    ? 'Tìm theo tên môn, phòng thi, giám thị...'
+                    : 'Tìm theo tên môn, mã môn, phòng, GV...',
+                hintStyle: TextStyle(
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, // Màu chữ gợi ý
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: isDark ? Colors.blue.shade300 : Colors.blueAccent,
+                ),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
-                  icon: const Icon(Icons.clear),
+                  icon: Icon(
+                    Icons.clear,
+                    color: isDark ? Colors.white70 : Colors.black54,
+                  ),
                   onPressed: () => _searchController.clear(),
                 )
                     : null,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 filled: true,
-                fillColor: Colors.grey.shade100,
+                // Màu nền linh hoạt theo Light/Dark Mode
+                fillColor: isDark ? const Color(0xFF1F1F1F) : Colors.grey.shade100,
+
+                // Định nghĩa đường viền để không bị cứng nhắc màu sắc
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none, // Bỏ viền cứng nếu muốn thanh tìm kiếm dạng phẳng hiện đại
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(
+                    color: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+                    width: 1,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: Colors.blueAccent,
+                    width: 1.5,
+                  ),
+                ),
                 isDense: true,
               ),
             ),
