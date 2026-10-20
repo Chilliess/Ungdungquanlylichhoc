@@ -28,16 +28,21 @@
 ```text
 lib/
 │
-├── auth/                 # Màn hình đăng nhập, đăng ký
-├── screen/               # Các màn hình chính của ứng dụng
-│   ├── account_screen.dart          # Quản lý tài khoản & đổi mật khẩu
-│   ├── home_screen.dart             # Màn hình chính & chào người dùng
-│   ├── schedule_management_screen.dart # Thêm/Sửa lịch học & thuật toán chống trùng
-│   ├── subject_management_screen.dart  # Quản lý môn học
-│   ├── view_schedule_screen.dart    # Xem lịch học tổng quan
-│   └── statistical.dart             # Thống kê buổi học
-│
-└── main.dart             # Khởi chạy ứng dụng và cấu hình Supabase
+├── auth/                                 # Màn hình đăng nhập, đăng ký
+│   ├── loginscreen.dart                  # Màn hình đăng nhập
+│   └── signinscreen.dart                 # Màn hình đăng ký tài khoản
+├── screen/                               # Các màn hình chính của ứng dụng
+│   ├── info_account.dart                 # Quản lý tài khoản & đổi mật khẩu
+│   ├── schedule_announcement.dart        # Thiết lập thông báo nhắc nhở lịch
+│   ├── schedule_management_screen.dart   # Thêm/Sửa lịch học
+│   ├── settings.dart                     # Cài đặt
+│   ├── statistical.dart                  # Thống kê buổi học
+│   ├── subject_management_screen.dart    # Quản lý môn học
+│   └── view_schedule_screen.dart         # Xem lịch học tổng quan
+├── splash/                               # Phần kiểm tra Session
+│   └── splashscreen.dart                 # Phần code cho việc kiểm tra Session
+├── homescreen.dart                       # Màn hình chính
+└── main.dart                             # Khởi chạy ứng dụng và cấu hình Supabase
 ```
 
 ---
