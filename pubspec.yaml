@@ -43,6 +43,8 @@ dependencies:
   timezone: 0.10.1
   flutter_timezone: 4.1.1
   shared_preferences: ^2.2.2
+  file_picker: ^8.0.0
+  csv: ^6.0.0
 
 dev_dependencies:
   flutter_test:
