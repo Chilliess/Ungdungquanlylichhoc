@@ -1,74 +1,221 @@
-# Ứng Dụng Quản Lý Lịch Học & Thời Khóa Biểu (Flutter & Supabase)
+# Ứng Dụng Quản Lý Lịch Học & Thời Khóa Biểu
 
-Ứng dụng di động được xây dựng bằng **Flutter** kết hợp với **Supabase** làm Backend-as-a-Service, giúp học sinh/sinh viên dễ dàng quản lý lịch học, môn học, thời khóa biểu cá nhân và tự động phát hiện xung đột thời gian (trùng lịch học).
+Ứng dụng Flutter hỗ trợ sinh viên quản lý môn học, thời khóa biểu, lịch kiểm tra và thời gian tự học. Ứng dụng dùng Supabase để xác thực tài khoản và lưu dữ liệu; lịch được tổng hợp theo ngày, có thể xem theo ngày/tháng/năm, tìm kiếm, phân loại và đặt nhắc nhở.
 
----
+## Mục lục
 
-## Các Tính Năng Chính
+- [Tính năng](#tính-năng)
+- [Luồng sử dụng](#luồng-sử-dụng)
+- [Công nghệ](#công-nghệ)
+- [Cấu trúc dự án](#cấu-trúc-dự-án)
+- [Dữ liệu và cách ứng dụng hoạt động](#dữ-liệu-và-cách-ứng-dụng-hoạt-động)
+- [Yêu cầu và cài đặt](#yêu-cầu-và-cài-đặt)
+- [Cấu hình Supabase](#cấu-hình-supabase)
+- [Nhập lịch từ CSV](#nhập-lịch-từ-csv)
+- [Kiểm thử](#kiểm-thử)
+- [Lưu ý](#lưu-ý)
+- [Tác giả](#tác-giả)
 
-* **Quản lý tài khoản bảo mật:** Đăng nhập, đăng ký, đổi mật khẩu và cập nhật thông tin cá nhân (Tên người dùng) liên kết chặt chẽ với hệ thống Supabase Auth và bảng `profiles`.
-* **Quản lý môn học & Lịch học linh hoạt:** Thêm mới, chỉnh sửa thông tin môn học, phòng học, giảng viên và các khung giờ học trong tuần.
-* **Thuật toán chống trùng lịch thông minh (Conflict Detection):**
-    * Tự động kiểm tra chéo các khung giờ học mới thêm xem có bị đá chân nhau hay không.
-    * Đối chiếu trực tiếp với các lịch học đã có sẵn trong cơ sở dữ liệu dựa trên khoảng thời gian (`date overlap`) và ngày trong tuần (`days of week`) bằng logic tối ưu.
-* **Thống kê & Theo dõi:** Thống kê các buổi học trực quan.
-* **Giao diện thân thiện:** Thiết kế hiện đại, mượt mà, hỗ trợ xử lý trạng thái tải (`loading`) và thông báo lỗi trực quan qua `SnackBar`.
+## Tính năng
 
----
+### Tài khoản
 
-## Công Nghệ Sử Dụng
+- Đăng ký và đăng nhập bằng email/mật khẩu qua Supabase Auth.
+- Cập nhật tên hiển thị và đổi mật khẩu trong màn hình tài khoản.
+- Gửi email khôi phục mật khẩu qua Supabase Auth.
+- Nếu project bật xác nhận email, người dùng cần xác minh email trước khi đăng nhập.
+- Các nút đăng nhập Google, Microsoft và Apple hiện mới là giao diện; OAuth chưa được cấu hình.
 
-* **Frontend:** Flutter (Dart)
-* **Backend & Database:** Supabase (PostgreSQL, Supabase Auth, Row Level Security - RLS)
+### Trang chủ
 
----
+- Chào người dùng theo tên hồ sơ và hiển thị ngày hiện tại.
+- Tổng hợp lịch học và lịch kiểm tra trong ngày theo thứ tự thời gian.
+- Hiển thị các sự kiện sắp tới, môn học và thông tin như phòng học, giảng viên.
+- Truy cập nhanh đến lịch, tài khoản và phần cài đặt nhắc nhở.
 
-## Cấu Trúc Thư Mục Dự Án
+### Môn học và thời khóa biểu
+
+- Tạo và chỉnh sửa môn học cùng buổi học, thời gian, phòng và khoảng ngày áp dụng.
+- Chọn nhiều ngày học trong tuần; tìm kiếm môn theo tên hoặc mã.
+- Kiểm tra thời gian kết thúc, khoảng ngày và xung đột giữa lịch học/lịch kiểm tra trong luồng quản lý thời khóa biểu.
+- Chỉnh sửa lịch theo nhóm từ màn hình lịch hoặc quản lý môn học. Các thay đổi được lưu qua hàm Supabase `save_subject_schedule`.
+- Xóa môn học cần xác nhận; thao tác cơ sở dữ liệu dọn các lịch học, lịch kiểm tra và nhắc nhở liên quan.
+
+### Lịch học, lịch kiểm tra và lịch lặp
+
+- Lịch tổng hợp có chế độ xem ngày, tháng và năm; hỗ trợ tìm kiếm, mở chi tiết và chỉnh sửa sự kiện.
+- Tạo lịch kiểm tra theo ngày cụ thể; có thể bổ sung ghi chú và nhãn phân loại.
+- Lịch học lặp theo ngày, tuần, tháng hoặc năm; đặt ngày kết thúc hoặc để trống để không giới hạn.
+- Lịch tuần dùng các thứ đã chọn. Lịch tháng/năm bỏ qua ngày không tồn tại (ví dụ ngày 31 trong tháng không có 31).
+- Lịch cũ chưa có trường quy tắc lặp tiếp tục dùng ngày trong tuần và khoảng ngày đã lưu.
+
+### Nhãn, nhắc nhở và thống kê
+
+- Tạo nhãn phân loại có màu; dùng nhãn cho lịch học và lịch kiểm tra.
+- Đổi tên hoặc xóa nhãn cập nhật những sự kiện đang gắn nhãn đó. Bỏ nhãn khỏi một sự kiện không xóa nhãn khỏi danh sách.
+- Cấu hình nhắc cho lịch học/lịch kiểm tra; các mốc nhắc gồm 5, 10, 15, 30, 60 và 120 phút trước sự kiện.
+- Tùy chọn giao diện sáng/tối được lưu trên thiết bị.
+- Xem thống kê số buổi và tổng thời lượng theo tuần hoặc tháng, gồm phân tích theo môn và theo ngày. Lịch lặp được tính theo những ngày thực sự diễn ra trong khoảng thống kê.
+
+## Luồng sử dụng
+
+1. Tạo tài khoản hoặc đăng nhập. Tên hiển thị được lưu trong hồ sơ người dùng.
+2. Tạo môn học và các buổi học, hoặc nhập các buổi học từ CSV.
+3. Mở lịch để xem thời khóa biểu/lịch kiểm tra; dùng nhãn màu, ghi chú và quy tắc lặp khi cần.
+4. Thiết lập nhắc nhở cho các sự kiện và xem thống kê học tập theo tuần/tháng.
+
+## Công nghệ
+
+- **Ứng dụng:** Flutter, Dart, Material.
+- **Xác thực và dữ liệu:** Supabase Auth, PostgreSQL, Row Level Security (RLS).
+- **Lịch và tiện ích:** `calendar_view`, `intl`, `flutter_local_notifications`, `timezone`, `shared_preferences`, `file_picker` và `csv`.
+
+## Cấu trúc dự án
 
 ```text
 lib/
-│
-├── auth/                                 # Màn hình đăng nhập, đăng ký
-│   ├── loginscreen.dart                  # Màn hình đăng nhập
-│   └── signinscreen.dart                 # Màn hình đăng ký tài khoản
-├── screen/                               # Các màn hình chính của ứng dụng
-│   ├── info_account.dart                 # Quản lý tài khoản & đổi mật khẩu
-│   ├── schedule_announcement.dart        # Thiết lập thông báo nhắc nhở lịch
-│   ├── schedule_management_screen.dart   # Thêm/Sửa lịch học
-│   ├── settings.dart                     # Cài đặt
-│   ├── statistical.dart                  # Thống kê buổi học
-│   ├── subject_management_screen.dart    # Quản lý môn học
-│   └── view_schedule_screen.dart         # Xem lịch học tổng quan
-├── splash/                               # Phần kiểm tra Session
-│   └── splashscreen.dart                 # Phần code cho việc kiểm tra Session
-├── homescreen.dart                       # Màn hình chính
-└── main.dart                             # Khởi chạy ứng dụng và cấu hình Supabase
+├── auth/       # Đăng nhập, đăng ký, khôi phục mật khẩu và thành phần xác thực
+├── models/     # Mô hình dữ liệu trang chủ, quy tắc lịch lặp, thống kê
+├── screen/     # Các màn hình lịch, môn học, tài khoản, cài đặt, nhắc nhở
+├── services/   # Tải và tổng hợp dữ liệu trang chủ
+├── splash/     # Khởi động và kiểm tra phiên đăng nhập
+├── theme/      # Màu sắc giao diện
+├── widgets/    # Widget và thông báo dùng chung
+├── homescreen.dart
+└── main.dart   # Khởi tạo Supabase, ngôn ngữ và chủ đề
+
+supabase/
+├── migrations/ # Cập nhật schema cho database đã được tạo trước đó
+└── README.md   # Mô tả và thứ tự áp dụng migration
+
+supabase_database.sql # Schema và các hàm SQL tổng hợp
+test/                  # Kiểm thử widget, model, service và luồng giao diện
 ```
 
----
+### Một số màn hình và thành phần chính
 
-## Hướng Dẫn Cài Đặt & Chạy Dự Án
+| Tệp | Trách nhiệm |
+|---|---|
+| `lib/homescreen.dart` | Trang chủ, lịch hôm nay và sự kiện sắp tới |
+| `lib/screen/view_schedule_screen.dart` | Lịch tổng hợp theo ngày/tháng/năm |
+| `lib/screen/lesson_editor.dart` | Form tạo/sửa lịch, ghi chú, nhãn và lịch lặp |
+| `lib/screen/subject_management_screen.dart` | Quản lý môn học và lịch lặp theo nhóm |
+| `lib/screen/schedule_management_screen.dart` | Danh sách thời khóa biểu/lịch kiểm tra và kiểm tra xung đột |
+| `lib/screen/schedule_announcement.dart` | Thiết lập thông báo nhắc lịch |
+| `lib/screen/statistical.dart` | Thống kê theo tuần/tháng |
+| `lib/screen/settings.dart` | Cài đặt, giao diện và nhập lịch CSV |
+| `lib/services/home_service.dart` | Đọc và tổng hợp dữ liệu Supabase cho trang chủ |
+| `lib/models/schedule_recurrence.dart` | Quy tắc ngày diễn ra dùng chung giữa lịch, trang chủ và thống kê |
 
-1. **Clone repository về máy:**
-   ```bash
-   git clone https://github.com/Chilliess/Ungdungquanlylichhoc.git
-   ```
-2. **Cài đặt các gói phụ thuộc (Dependencies):**
-   ```bash
-   flutter pub get
-   ```
-3. **Cấu hình Supabase:**
-    * Tạo một dự án mới trên [Supabase](https://supabase.com).
-    * Mở file supabase_database.sql có trong project rồi copy và chạy trên Supabase.
-    * Chỉnh lại đường dẫn url và anonKey ở main.dart theo database trên Supabase của bạn.
-4. **Chạy ứng dụng:**
-   ```bash
- flutter run
-   ```
+## Dữ liệu và cách ứng dụng hoạt động
 
----
+### Các bảng chính
 
-## Tác Giả & Phát Triển
-Dự án được phát triển bởi:
-* **Đỗ Việt Dũng - 23010547**.
-* **Phạm Tiến Chiêu - 23010526**.
+| Bảng | Dữ liệu |
+|---|---|
+| `profiles` | Tên hiển thị gắn với tài khoản Supabase Auth |
+| `subjects` | Môn học, mã môn và màu môn |
+| `schedules` | Buổi học, thời gian, thứ trong tuần, khoảng ngày; các cột bổ sung lưu quy tắc lặp, ghi chú và nhãn |
+| `schedule_exams` | Lịch kiểm tra theo ngày cụ thể, kèm thời gian, phòng và giám thị |
+| `reminders` | Cài đặt nhắc, thời điểm nhắc và loại sự kiện (lịch học hoặc lịch kiểm tra) |
+| `calendar_categories` | Tên và màu nhãn do từng tài khoản quản lý |
+
+Môn học liên kết với lịch học và lịch kiểm tra qua `subject_id`. Những bản ghi cá nhân có `user_id` được giới hạn bằng chính sách RLS; các màn hình lấy dữ liệu theo tài khoản đang đăng nhập. Hàm SQL như `save_subject_schedule`, `save_calendar_lesson` và `delete_calendar_subject` xử lý các thao tác cần cập nhật nhiều bản ghi cùng nhau.
+
+### Từ dữ liệu đến giao diện
+
+`HomeService` tải hồ sơ, môn học, lịch học, lịch kiểm tra và cài đặt nhắc của tài khoản hiện tại. Các model trong `lib/models/` chuẩn hóa thứ trong tuần, xác định ngày xuất hiện của lịch lặp và tính số buổi/tổng phút cho thống kê. Các màn hình lịch sử dụng dữ liệu đó để hiển thị sự kiện theo ngày, tháng hoặc năm.
+
+Lịch học theo tuần cũ lưu các ngày đã chọn trong `day_of_week`. Lịch lặp mới dùng thêm `recurrence` với các giá trị `none`, `daily`, `weekly`, `monthly` hoặc `yearly`; `end_date` để trống biểu thị không đặt ngày kết thúc. Quy tắc lặp được dùng chung khi dựng lịch, tính sự kiện trang chủ và tổng hợp thống kê.
+
+## Yêu cầu và cài đặt
+
+- Flutter SDK có Dart tương thích với ràng buộc trong `pubspec.yaml` (`^3.5.4` trở lên).
+- Git và một project Supabase.
+
+Kiểm tra môi trường Flutter:
+
+```bash
+flutter doctor
+```
+
+Clone nhánh `main`:
+
+```bash
+git clone --branch main --single-branch https://github.com/Chilliess/Ungdungquanlylichhoc.git
+cd Ungdungquanlylichhoc
+flutter pub get
+```
+
+Sau khi cấu hình Supabase, chạy ứng dụng trên thiết bị hoặc emulator đã kết nối:
+
+```bash
+flutter run
+```
+
+## Cấu hình Supabase
+
+### Database mới
+
+1. Tạo project trên [Supabase](https://supabase.com/).
+2. Mở **SQL Editor → New query** trong Supabase Dashboard.
+3. Chạy toàn bộ `supabase_database.sql` một lần để tạo các bảng, chính sách RLS và hàm SQL mà ứng dụng sử dụng.
+
+### Database đã tồn tại
+
+Không chạy lại toàn bộ SQL tổng trên một database đang có nếu chưa xác định rõ ảnh hưởng. Đọc [`supabase/README.md`](supabase/README.md), kiểm tra schema hiện tại và chỉ áp dụng những migration còn thiếu trong `supabase/migrations/`.
+
+Các migration cập nhật chức năng lịch phụ thuộc vào schema ban đầu; README trong thư mục `supabase/` mô tả thứ tự và mục đích từng bản. SQL tổng đã bao gồm các cập nhật này cho trường hợp tạo database mới.
+
+### Kết nối ứng dụng
+
+Ứng dụng khởi tạo Supabase trong `lib/main.dart`. Cập nhật `url` và `anonKey` bằng Project URL và publishable key (hoặc anon key) của project Supabase bạn vừa tạo, sau đó chạy lại ứng dụng.
+
+Ứng dụng Flutter là client công khai: **không** đặt `service_role` key, database password hoặc secret key trong mã ứng dụng. Kiểm tra RLS trước khi dùng dữ liệu thật; trong SQL tổng hiện tại, các bảng lịch, môn, nhắc và nhãn giới hạn truy cập theo chủ sở hữu, còn chính sách đọc `profiles` cho phép người dùng đã xác thực đọc hồ sơ. Hãy điều chỉnh chính sách này nếu tên hồ sơ cần được giữ riêng tư. Nếu bật xác nhận email hoặc khôi phục mật khẩu, cấu hình email và URL chuyển hướng tương ứng trong Supabase Auth.
+
+## Nhập lịch từ CSV
+
+Tính năng nhập nằm trong phần cài đặt. Tệp cần có dòng tiêu đề ở dòng đầu tiên; ứng dụng đọc các cột theo vị trí từ A đến J:
+
+| Cột | Nội dung | Ví dụ |
+|---|---|---|
+| A | Mã môn học | `INT101` |
+| B | Tên môn học | `Lập trình C` |
+| C | Màu Hex (có thể để trống) | `#3B82F6` |
+| D | Phòng học | `P.302` |
+| E | Giảng viên | `Nguyễn Văn A` |
+| F | Ngày trong tuần | `2,4` hoặc `[2,4]` |
+| G | Giờ bắt đầu | `07:00` |
+| H | Giờ kết thúc | `09:30` |
+| I | Ngày bắt đầu | `2026-01-01` hoặc `01/01/2026` |
+| J | Ngày kết thúc | `2026-06-30` hoặc `30/06/2026` |
+
+Quy ước ngày trong tuần: Thứ hai = `2`, Thứ ba = `3`, ..., Thứ bảy = `7`, Chủ nhật = `8`. Tệp có thể dùng dấu phẩy hoặc dấu chấm phẩy làm dấu phân cách. Khi lưu từ Excel, chọn **CSV UTF-8** để giữ tiếng Việt.
+
+Ví dụ dòng tiêu đề và một buổi học:
+
+```csv
+Mã môn học,Tên môn học,Màu,Phòng học,Giảng viên,Ngày trong tuần,Giờ bắt đầu,Giờ kết thúc,Ngày bắt đầu,Ngày kết thúc
+INT101,Lập trình C,#3B82F6,P.302,Nguyễn Văn A,"2,4",07:00,09:30,2026-01-01,2026-06-30
+```
+
+## Kiểm thử
+
+Chạy toàn bộ kiểm thử Flutter:
+
+```bash
+flutter test
+```
+
+Các kiểm thử hiện có bao phủ quy tắc lịch lặp, thống kê, service trang chủ, tài khoản, biên tập lịch, nhãn phân loại và tương tác giao diện.
+
+## Lưu ý
+
+- Thông báo cục bộ và quyền thông báo phụ thuộc nền tảng, quyền của hệ điều hành và cấu hình thiết bị.
+- Các nút OAuth trên màn hình hiện chưa kết nối nhà cung cấp đăng nhập.
+- Khi thêm hoặc nâng cấp chức năng Supabase, cần cập nhật schema tương ứng bằng SQL tổng cho database mới hoặc migration cho database hiện có.
+
+## Tác giả
+
+- Đỗ Việt Dũng - 23010547
+- Phạm Tiến Chiêu - 23010526
