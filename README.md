@@ -63,7 +63,7 @@ lib/
     * Chỉnh lại đường dẫn url và anonKey ở main.dart theo database trên Supabase của bạn.
 4. **Chạy ứng dụng:**
    ```bash
-   flutter run
+ flutter run
    ```
 
 ---

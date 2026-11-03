@@ -1,3 +1,4 @@
+import 'package:untitled/widgets/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
@@ -30,7 +31,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String valStr = rawValue.toString().trim();
 
     // Xử lý số Serial nguyên thủy của Excel (VD: 45292)
-    if (double.tryParse(valStr) != null && !valStr.contains('-') && !valStr.contains('/')) {
+    if (double.tryParse(valStr) != null &&
+        !valStr.contains('-') &&
+        !valStr.contains('/')) {
       double days = double.parse(valStr);
       DateTime baseDate = DateTime(1899, 12, 30);
       DateTime parsed = baseDate.add(Duration(days: days.toInt()));
@@ -85,7 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         withData: true,
       );
 
-      if (result == null || result.files.isEmpty) return;
+      if (!mounted || result == null || result.files.isEmpty) return;
 
       final file = result.files.first;
       if (file.bytes == null) throw 'Không thể đọc nội dung file!';
@@ -124,21 +127,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
         String subjectName = row[1].toString().trim();
         if (subjectCode.isEmpty || subjectName.isEmpty) continue;
 
-        String colorCode = (row.length > 2) ? row[2].toString().trim() : '#3B82F6';
-        String room = (row.length > 3) ? row[3].toString().trim() : 'Chưa cập nhật';
-        String lecturer = (row.length > 4) ? row[4].toString().trim() : 'Chưa cập nhật';
+        String colorCode =
+            (row.length > 2) ? row[2].toString().trim() : '#3B82F6';
+        String room =
+            (row.length > 3) ? row[3].toString().trim() : 'Chưa cập nhật';
+        String lecturer =
+            (row.length > 4) ? row[4].toString().trim() : 'Chưa cập nhật';
 
         String rawDayOfWeek = (row.length > 5) ? row[5].toString().trim() : '2';
         List<int> dayOfWeekList = [];
         try {
           rawDayOfWeek = rawDayOfWeek.replaceAll('[', '').replaceAll(']', '');
-          dayOfWeekList = rawDayOfWeek.split(',').map((e) => int.parse(e.trim())).toList();
+          dayOfWeekList =
+              rawDayOfWeek.split(',').map((e) => int.parse(e.trim())).toList();
         } catch (_) {
           dayOfWeekList = [2];
         }
 
-        String startTime = _parseExcelTime((row.length > 6) ? row[6] : null, '07:00:00');
-        String endTime = _parseExcelTime((row.length > 7) ? row[7] : null, '09:00:00');
+        String startTime =
+            _parseExcelTime((row.length > 6) ? row[6] : null, '07:00:00');
+        String endTime =
+            _parseExcelTime((row.length > 7) ? row[7] : null, '09:00:00');
 
         String startDate = _parseExcelDate((row.length > 8) ? row[8] : null);
         String endDate = _parseExcelDate((row.length > 9) ? row[9] : null);
@@ -154,12 +163,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (existingSubject != null) {
           subjectId = existingSubject['id'];
         } else {
-          final newSubRes = await _supabase.from('subjects').insert({
-            'user_id': userId,
-            'subject_code': subjectCode,
-            'subject_name': subjectName,
-            'color_code': colorCode.isEmpty ? '#3B82F6' : colorCode,
-          }).select('id').single();
+          final newSubRes = await _supabase
+              .from('subjects')
+              .insert({
+                'user_id': userId,
+                'subject_code': subjectCode,
+                'subject_name': subjectName,
+                'color_code': colorCode.isEmpty ? '#3B82F6' : colorCode,
+              })
+              .select('id')
+              .single();
 
           subjectId = newSubRes['id'];
         }
@@ -180,16 +193,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        AppNotice.show(
+          context,
           SnackBar(
-            content: Text('Đã nhập thành công $successCount lịch học từ file CSV!'),
+            content:
+                Text('Đã nhập thành công $successCount lịch học từ file CSV!'),
             backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        AppNotice.show(
+          context,
           SnackBar(
             content: Text('Lỗi nhập dữ liệu: $e'),
             backgroundColor: Colors.red,
@@ -211,7 +227,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             Icon(Icons.help_outline, color: Colors.blueAccent),
             SizedBox(width: 8),
-            Text('Hướng dẫn nhập CSV', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Flexible(
+                child: Text('Hướng dẫn nhập CSV',
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
           ],
         ),
         content: SingleChildScrollView(
@@ -221,33 +240,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               const Text(
                 '1. Cấu trúc cột file CSV nếu làm trong Excel (từ A đến J):',
-                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent),
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.blueAccent),
               ),
               const SizedBox(height: 6),
               const SelectableText(
                 '• Cột A: Mã môn học (VD: INT101)\n'
-                    '• Cột B: Tên môn học (VD: Lập trình C)\n'
-                    '• Cột C: Mã màu Hex (VD: #3B82F6 hoặc để trống)\n'
-                    '• Cột D: Phòng học (VD: P.302)\n'
-                    '• Cột E: Giảng viên (VD: Nguyễn Văn A)\n'
-                    '• Cột F: Ngày trong tuần (VD: 2,4 hoặc [2,4] - Thứ 2, Thứ 4)\n'
-                    '• Cột G: Giờ bắt đầu (VD: 07:00)\n'
-                    '• Cột H: Giờ kết thúc (VD: 09:30)\n'
-                    '• Cột I: Ngày bắt đầu (VD: 2026-01-01 hoặc 01/01/2026)\n'
-                    '• Cột J: Ngày kết thúc (VD: 2026-06-30 hoặc 30/06/2026)',
+                '• Cột B: Tên môn học (VD: Lập trình C)\n'
+                '• Cột C: Mã màu Hex (VD: #3B82F6 hoặc để trống)\n'
+                '• Cột D: Phòng học (VD: P.302)\n'
+                '• Cột E: Giảng viên (VD: Nguyễn Văn A)\n'
+                '• Cột F: Ngày trong tuần (VD: 2,4 hoặc [2,4] - Thứ 2, Thứ 4)\n'
+                '• Cột G: Giờ bắt đầu (VD: 07:00)\n'
+                '• Cột H: Giờ kết thúc (VD: 09:30)\n'
+                '• Cột I: Ngày bắt đầu (VD: 2026-01-01 hoặc 01/01/2026)\n'
+                '• Cột J: Ngày kết thúc (VD: 2026-06-30 hoặc 30/06/2026)',
                 style: TextStyle(fontSize: 13, height: 1.4),
               ),
               const SizedBox(height: 12),
               const Text(
                 '2. Lưu ý quan trọng khi Lưu file trên Excel:',
-                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.orange),
               ),
               const SizedBox(height: 6),
               const Text(
                 '• Dòng 1 phải ghi tiêu đề tiếng Việt:\n'
-                    '"Mã môn học,Tên môn học,Màu,Phòng học,Giảng viên,Ngày trong tuần,Giờ bắt đầu,Giờ kết thúc,Ngày bắt đầu,Ngày kết thúc"\n'
-                    '• Khi Save trong Excel, hãy chọn định dạng:\n'
-                    '  CSV UTF-8.',
+                '"Mã môn học,Tên môn học,Màu,Phòng học,Giảng viên,Ngày trong tuần,Giờ bắt đầu,Giờ kết thúc,Ngày bắt đầu,Ngày kết thúc"\n'
+                '• Khi Save trong Excel, hãy chọn định dạng:\n'
+                '  CSV UTF-8.',
                 style: TextStyle(fontSize: 13, height: 1.4),
               ),
             ],
@@ -256,7 +277,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Đã hiểu', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            child: const Text('Đã hiểu',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -268,7 +290,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Đăng xuất'),
-        content: const Text('Bạn có chắc chắn muốn đăng xuất khỏi tài khoản không?'),
+        content:
+            const Text('Bạn có chắc chắn muốn đăng xuất khỏi tài khoản không?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -290,127 +313,132 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (context) => Loginscreen()),
-                (value) => false,
+            (value) => false,
           );
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Lỗi đăng xuất: $e'), backgroundColor: Colors.red),
+          AppNotice.show(
+            context,
+            SnackBar(
+                content: Text('Lỗi đăng xuất: $e'),
+                backgroundColor: Colors.red),
           );
         }
       }
     }
   }
 
+  Widget _icon(IconData icon) => Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+          color: Theme.of(context)
+              .colorScheme
+              .primaryContainer
+              .withValues(alpha: .45),
+          borderRadius: BorderRadius.circular(12)),
+      child:
+          Icon(icon, size: 22, color: Theme.of(context).colorScheme.primary));
+
+  Widget _section(String title, List<Widget> children) => Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text(title,
+                style: TextStyle(
+                    fontSize: 12,
+                    letterSpacing: .7,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant))),
+        Material(
+            color: Theme.of(context).colorScheme.surface,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                    color: Theme.of(context).colorScheme.outlineVariant)),
+            clipBehavior: Clip.antiAlias,
+            child: Column(children: children)),
+      ]));
+
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
+    final colors = Theme.of(context).colorScheme;
     return Scaffold(
+      backgroundColor: colors.surfaceContainerLowest,
       appBar: AppBar(
-        title: const Text('Cài đặt ứng dụng'),
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        foregroundColor: isDark ? Colors.white : Colors.black,
-        elevation: 0,
-      ),
+          title: const Text('Cài đặt'),
+          backgroundColor: colors.surfaceContainerLowest),
       body: _isImporting
           ? const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Đang xử lý dữ liệu và thêm vào hệ thống...'),
-          ],
-        ),
-      )
-          : ListView(
-        padding: const EdgeInsets.all(16.0),
-        children: [
-          const Text(
-            'CHUNG & TIỆN ÍCH',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blueAccent),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Column(
-              children: [
-                SwitchListTile(
-                  secondary: const Icon(Icons.dark_mode, color: Colors.purple),
-                  title: const Text('Chế độ tối (Dark Mode)'),
-                  value: themeNotifier.value == ThemeMode.dark,
-                  activeColor: Colors.blueAccent,
-                  onChanged: (bool value) async {
-                    themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
-                    await _saveThemePreference(value);
-                    setState(() {});
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(value ? 'Đã bật chế độ tối' : 'Đã tắt chế độ tối'),
-                        duration: const Duration(milliseconds: 800),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                // MỤC HƯỚNG DẪN NHẬP CSV
-                ListTile(
-                  leading: const Icon(Icons.help_outline, color: Colors.orange),
-                  title: const Text('Hướng dẫn cấu trúc file CSV'),
-                  subtitle: const Text('Xem danh sách cột & quy tắc định dạng'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _showInstructionDialog,
-                ),
-                const Divider(height: 1),
-                // MỤC NHẬP FILE CSV
-                ListTile(
-                  leading: const Icon(Icons.upload_file, color: Colors.green),
-                  title: const Text('Nhập lịch học từ file CSV'),
-                  subtitle: const Text('Chọn file CSV đã lưu từ máy tính / điện thoại'),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: _importScheduleFromCsv,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          const Text(
-            'THÔNG TIN',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blueAccent),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: const Column(
-              children: [
-                ListTile(
-                  leading: Icon(Icons.info_outline, color: Colors.blue),
-                  title: Text('Phiên bản ứng dụng'),
-                  trailing: Text('1.0.0', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red,
-              side: const BorderSide(color: Colors.red),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            icon: const Icon(Icons.logout),
-            label: const Text('Đăng xuất tài khoản', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            onPressed: _signOut,
-          ),
-        ],
-      ),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Đang nhập lịch học…')
+            ]))
+          : Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 640),
+                  child: ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+                      children: [
+                        _section('GIAO DIỆN', [
+                          SwitchListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
+                              secondary: _icon(Icons.dark_mode_outlined),
+                              title: const Text('Chế độ tối'),
+                              value: themeNotifier.value == ThemeMode.dark,
+                              onChanged: (value) async {
+                                themeNotifier.value =
+                                    value ? ThemeMode.dark : ThemeMode.light;
+                                setState(() {});
+                                await _saveThemePreference(value);
+                              }),
+                        ]),
+                        _section('DỮ LIỆU LỊCH HỌC', [
+                          ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
+                              leading: _icon(Icons.upload_file_outlined),
+                              title: const Text('Nhập lịch từ CSV'),
+                              subtitle:
+                                  const Text('Thêm nhiều buổi học cùng lúc'),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: _importScheduleFromCsv),
+                          const Divider(height: 1, indent: 66, endIndent: 16),
+                          ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
+                              leading: _icon(Icons.help_outline),
+                              title: const Text('Hướng dẫn nhập file'),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: _showInstructionDialog),
+                        ]),
+                        _section('THÔNG TIN', [
+                          ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
+                              leading: _icon(Icons.info_outline),
+                              title: const Text('Phiên bản ứng dụng'),
+                              trailing: Text('1.0.0',
+                                  style: TextStyle(
+                                      color: colors.onSurfaceVariant))),
+                        ]),
+                        OutlinedButton.icon(
+                            onPressed: _signOut,
+                            icon: const Icon(Icons.logout, size: 20),
+                            label: const Text('Đăng xuất'),
+                            style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.red.shade700,
+                                backgroundColor: colors.surface,
+                                side: BorderSide(color: colors.outlineVariant),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14)))),
+                      ]))),
     );
   }
 }

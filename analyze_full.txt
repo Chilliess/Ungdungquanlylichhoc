@@ -1,0 +1,64 @@
+﻿Analyzing Ungdungquanlylichhoc-master...                        
+
+   info - Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation - lib\main.dart:64:15 - prefer_const_constructors
+warning - Unused import: '../auth/loginscreen.dart'. Try removing the import directive - lib\screen\info_account.dart:4:8 - unused_import
+   info - Parameter 'key' could be a super parameter. Trying converting 'key' to a super parameter - lib\screen\info_account.dart:7:9 - use_super_parameters
+   info - Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation - lib\screen\info_account.dart:154:15 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation - lib\screen\info_account.dart:171:15 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation - lib\screen\info_account.dart:197:15 - prefer_const_constructors
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screen\schedule_announcement.dart:617:35 - deprecated_member_use
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screen\schedule_announcement.dart:718:35 - deprecated_member_use
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\screen\schedule_management_screen.dart:136:28 - use_build_context_synchronously
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screen\schedule_management_screen.dart:384:25 - deprecated_member_use
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\screen\schedule_management_screen.dart:688:37 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\screen\schedule_management_screen.dart:690:44 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\screen\schedule_management_screen.dart:694:44 - use_build_context_synchronously
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screen\schedule_management_screen.dart:741:25 - deprecated_member_use
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext - lib\screen\schedule_management_screen.dart:852:39 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext - lib\screen\schedule_management_screen.dart:854:46 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext - lib\screen\schedule_management_screen.dart:859:44 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\screen\schedule_management_screen.dart:895:30 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\screen\schedule_management_screen.dart:897:30 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\screen\schedule_management_screen.dart:925:30 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\screen\schedule_management_screen.dart:927:30 - use_build_context_synchronously
+   info - Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation - lib\screen\settings.dart:217:18 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation - lib\screen\settings.dart:218:18 - prefer_const_constructors
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes. Try adding 'const' before the literal - lib\screen\settings.dart:221:23 - prefer_const_literals_to_create_immutables
+   info - Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation - lib\screen\settings.dart:292:53 - prefer_const_constructors
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screen\settings.dart:345:19 - deprecated_member_use
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\screen\settings.dart:350:42 - use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss. Try replacing the use of the deprecated member with the replacement - lib\screen\statistical.dart:446:20 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss. Try replacing the use of the deprecated member with the replacement - lib\screen\statistical.dart:511:34 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss. Try replacing the use of the deprecated member with the replacement - lib\screen\statistical.dart:558:40 - deprecated_member_use
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\screen\subject_management_screen.dart:70:28 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\screen\subject_management_screen.dart:220:37 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\screen\subject_management_screen.dart:222:44 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\screen\subject_management_screen.dart:226:44 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\screen\subject_management_screen.dart:263:30 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\screen\subject_management_screen.dart:267:30 - use_build_context_synchronously
+warning - The value of the field '_allItems' isn't used. Try removing the field, or using it - lib\screen\view_schedule_screen.dart:19:30 - unused_field
+   info - The private field _currentDisplayDate could be 'final'. Try making the field 'final' - lib\screen\view_schedule_screen.dart:22:12 - prefer_final_fields
+warning - The value of the field '_currentDisplayDate' isn't used. Try removing the field, or using it - lib\screen\view_schedule_screen.dart:22:12 - unused_field
+   info - 'leftIconVisible' is deprecated and shouldn't be used. This flag is deprecated and will be removed in next major version. Instead of this pass null in leftIconConfig to hide the icon. Try replacing the use of the deprecated member with the replacement - lib\screen\view_schedule_screen.dart:303:17 - deprecated_member_use
+   info - 'rightIconVisible' is deprecated and shouldn't be used. This flag is deprecated and will be removed in next major version. Instead of this pass null in rightIconConfig to hide the icon. Try replacing the use of the deprecated member with the replacement - lib\screen\view_schedule_screen.dart:304:17 - deprecated_member_use
+   info - 'leftIcon' is deprecated and shouldn't be used. This is deprecated and will be removed in next major version. Use leftIconConfig to add custom icon. Try replacing the use of the deprecated member with the replacement - lib\screen\view_schedule_screen.dart:305:17 - deprecated_member_use
+   info - 'rightIcon' is deprecated and shouldn't be used. This is deprecated and will be removed in next major version. Use leftIconConfig to add custom icon. Try replacing the use of the deprecated member with the replacement - lib\screen\view_schedule_screen.dart:309:17 - deprecated_member_use
+   info - 'leftIcon' is deprecated and shouldn't be used. This is deprecated and will be removed in next major version. Use leftIconConfig to add custom icon. Try replacing the use of the deprecated member with the replacement - lib\screen\view_schedule_screen.dart:347:17 - deprecated_member_use
+   info - 'rightIcon' is deprecated and shouldn't be used. This is deprecated and will be removed in next major version. Use leftIconConfig to add custom icon. Try replacing the use of the deprecated member with the replacement - lib\screen\view_schedule_screen.dart:348:17 - deprecated_member_use
+   info - Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation - lib\splash\splashscreen.dart:17:26 - prefer_const_constructors
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\splash\splashscreen.dart:20:33 - use_build_context_synchronously
+   info - Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation - lib\splash\splashscreen.dart:21:51 - prefer_const_constructors
+   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\splash\splashscreen.dart:24:33 - use_build_context_synchronously
+   info - Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation - lib\splash\splashscreen.dart:25:51 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation - lib\splash\splashscreen.dart:38:12 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation - lib\splash\splashscreen.dart:39:13 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation - lib\splash\splashscreen.dart:40:16 - prefer_const_constructors
+
+flutter : 53 issues found. (ran in 2.1s)
+At line:1 char:38
++ cd 'c:\Ungdungquanlylichhoc-master'; flutter analyze 2>&1 | Out-File  ...
++                                      ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (53 issues found. (ran in 2.1s):String 
+   ) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

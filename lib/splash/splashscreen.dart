@@ -11,20 +11,32 @@ class Splashscreen extends StatefulWidget {
 }
 
 class _SplashscreenState extends State<Splashscreen> {
-  final supabase = Supabase.instance.client;
-
-  nextScreen() async {
-    await Future.delayed(Duration(seconds: 3));
-
-    if (supabase.auth.currentSession == null){
-      Navigator.pushReplacement(context,
-          MaterialPageRoute(builder: (context) => Loginscreen())
-      );
-    } else {
-      Navigator.pushReplacement(context,
-          MaterialPageRoute(builder: (context) => HomeScreen())
-      );
+  /// Client Supabase.
+  ///
+  /// Truy cập theo kiểu lazy và bọc trong try/catch vì `Supabase.instance` sẽ
+  /// ném AssertionError nếu `Supabase.initialize()` chưa được gọi (ví dụ khi
+  /// chạy widget test). Khi đó app chuyển thẳng tới màn Login thay vì crash.
+  SupabaseClient? get _supabaseClient {
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      return null;
     }
+  }
+
+  Future<void> nextScreen() async {
+    await Future.delayed(const Duration(seconds: 3));
+    if (!mounted) return;
+
+    final client = _supabaseClient;
+    final hasSession = client?.auth.currentSession != null;
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => hasSession ? const HomeScreen() : const Loginscreen(),
+      ),
+    );
   }
 
   @override

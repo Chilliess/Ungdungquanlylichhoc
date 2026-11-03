@@ -1,3 +1,9 @@
+import 'package:untitled/widgets/app_notice.dart';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'lesson_categories.dart';
+import 'confirm_action.dart';
+import '../models/schedule_recurrence.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -15,12 +21,11 @@ class ScheduleAnnouncementScreen extends StatefulWidget {
       _ScheduleAnnouncementScreenState();
 }
 
-class _ScheduleAnnouncementScreenState
-    extends State<ScheduleAnnouncementScreen>
+class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
     with SingleTickerProviderStateMixin {
   final SupabaseClient _supabase = Supabase.instance.client;
   final FlutterLocalNotificationsPlugin _notifications =
-  FlutterLocalNotificationsPlugin();
+      FlutterLocalNotificationsPlugin();
 
   late TabController _tabController;
 
@@ -34,9 +39,19 @@ class _ScheduleAnnouncementScreenState
   Map<String, Map<String, dynamic>> _remindersBySchedule = {};
   Map<String, Map<String, dynamic>> _remindersByExam = {};
 
-  final TextEditingController _scheduleSearchController = TextEditingController();
+  final TextEditingController _scheduleSearchController =
+      TextEditingController();
   final TextEditingController _examSearchController = TextEditingController();
 
+  int _defaultMinutes = 15;
+  int _defaultVersion = 0;
+  bool? _permissionGranted;
+  String? _notificationNotice;
+  late final _categoryStore = SupabaseLessonCategoryStore(_supabase);
+  bool get _mobile =>
+      !const bool.fromEnvironment('dart.library.js_interop') &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
   bool _loading = true;
   bool _saving = false;
   bool _notificationsInitialized = false;
@@ -58,6 +73,7 @@ class _ScheduleAnnouncementScreenState
 
   @override
   void dispose() {
+    _categoryStore.dispose();
     _tabController.dispose();
     _scheduleSearchController.dispose();
     _examSearchController.dispose();
@@ -77,7 +93,9 @@ class _ScheduleAnnouncementScreenState
           final name = (subject['subject_name'] ?? '').toString().toLowerCase();
           final code = (subject['subject_code'] ?? '').toString().toLowerCase();
           final room = (schedule['room'] ?? '').toString().toLowerCase();
-          return name.contains(keyword) || code.contains(keyword) || room.contains(keyword);
+          return name.contains(keyword) ||
+              code.contains(keyword) ||
+              room.contains(keyword);
         }).toList();
       }
     });
@@ -96,8 +114,12 @@ class _ScheduleAnnouncementScreenState
           final name = (subject['subject_name'] ?? '').toString().toLowerCase();
           final code = (subject['subject_code'] ?? '').toString().toLowerCase();
           final room = (exam['room'] ?? '').toString().toLowerCase();
-          final supervisor = (exam['supervisor'] ?? '').toString().toLowerCase();
-          return name.contains(keyword) || code.contains(keyword) || room.contains(keyword) || supervisor.contains(keyword);
+          final supervisor =
+              (exam['supervisor'] ?? '').toString().toLowerCase();
+          return name.contains(keyword) ||
+              code.contains(keyword) ||
+              room.contains(keyword) ||
+              supervisor.contains(keyword);
         }).toList();
       }
     });
@@ -105,7 +127,18 @@ class _ScheduleAnnouncementScreenState
 
   Future<void> _loadScreen() async {
     try {
-      await _initializeNotifications();
+      final prefs = await SharedPreferences.getInstance();
+      _defaultMinutes =
+          prefs.getInt('reminder_default_${_supabase.auth.currentUser?.id}') ??
+              15;
+      try {
+        await _initializeNotifications();
+      } catch (_) {
+        _notificationNotice = 'Chưa thể bật thông báo trên thiết bị này.';
+      }
+      try {
+        await _categoryStore.load();
+      } catch (_) {}
       await _loadData();
       await _rescheduleAllEnabledReminders();
     } catch (e) {
@@ -120,8 +153,14 @@ class _ScheduleAnnouncementScreenState
 
   Future<void> _initializeNotifications() async {
     if (_notificationsInitialized) return;
+    if (!_mobile) {
+      _notificationNotice =
+          'Thông báo trên thiết bị hiện hỗ trợ Android và iOS.';
+      return;
+    }
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
     const darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
@@ -139,17 +178,22 @@ class _ScheduleAnnouncementScreenState
     final timezoneName = await FlutterTimezone.getLocalTimezone();
     tz.setLocalLocation(tz.getLocation(timezoneName));
 
-    await _notifications
-        .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
-
-    await _notifications
-        .resolvePlatformSpecificImplementation<
-        IOSFlutterLocalNotificationsPlugin>()
-        ?.requestPermissions(alert: true, badge: true, sound: true);
+    await _requestPermission();
 
     _notificationsInitialized = true;
+  }
+
+  Future<void> _requestPermission() async {
+    final android = _notifications.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    final ios = _notifications.resolvePlatformSpecificImplementation<
+        IOSFlutterLocalNotificationsPlugin>();
+    _permissionGranted = await android?.requestNotificationsPermission() ??
+        await ios?.requestPermissions(alert: true, badge: true, sound: true);
+    if (mounted) setState(() {});
+    if (_notificationsInitialized && _permissionGranted == true) {
+      await _rescheduleAllEnabledReminders();
+    }
   }
 
   Future<void> _loadData() async {
@@ -185,14 +229,14 @@ class _ScheduleAnnouncementScreenState
           .eq('user_id', userId);
 
       // Tải tất cả nhắc nhở từ bảng reminders chung
-      final reminderResponse = await _supabase
-          .from('reminders')
-          .select()
-          .eq('user_id', userId);
+      final reminderResponse =
+          await _supabase.from('reminders').select().eq('user_id', userId);
 
-      final schedules = List<Map<String, dynamic>>.from(scheduleResponse as List);
+      final schedules =
+          List<Map<String, dynamic>>.from(scheduleResponse as List);
       final exams = List<Map<String, dynamic>>.from(examResponse as List);
-      final reminders = List<Map<String, dynamic>>.from(reminderResponse as List);
+      final reminders =
+          List<Map<String, dynamic>>.from(reminderResponse as List);
 
       final reminderMap = <String, Map<String, dynamic>>{};
       final examReminderMap = <String, Map<String, dynamic>>{};
@@ -237,7 +281,7 @@ class _ScheduleAnnouncementScreenState
     final value = int.tryParse(
       reminder?['remind_before_minutes']?.toString() ?? '',
     );
-    return _reminderOptions.contains(value) ? value! : 15;
+    return _reminderOptions.contains(value) ? value! : _defaultMinutes;
   }
 
   bool _isEnabled(Map<String, dynamic> item, {bool isExam = false}) {
@@ -247,16 +291,23 @@ class _ScheduleAnnouncementScreenState
   }
 
   Future<void> _saveReminder(
-      Map<String, dynamic> item, {
-        required int minutes,
-        required bool enabled,
-        required bool isExam,
-      }) async {
+    Map<String, dynamic> item, {
+    required int minutes,
+    required bool enabled,
+    required bool isExam,
+  }) async {
     final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return;
+    if (userId == null || _saving) return;
 
     setState(() => _saving = true);
     try {
+      if (!await confirmAction(context,
+              message: enabled
+                  ? 'Bật nhắc trước $minutes phút cho lịch này và các buổi lặp của nó?'
+                  : 'Tắt nhắc nhở cho lịch này?') ||
+          !mounted) {
+        return;
+      }
       final itemId = item['id'].toString();
       final reminderMap = isExam ? _remindersByExam : _remindersBySchedule;
       final existing = reminderMap[itemId];
@@ -276,11 +327,8 @@ class _ScheduleAnnouncementScreenState
             .eq('id', existing['id'].toString())
             .eq('user_id', userId);
       } else {
-        final inserted = await _supabase
-            .from('reminders')
-            .insert(data)
-            .select()
-            .single();
+        final inserted =
+            await _supabase.from('reminders').insert(data).select().single();
         reminderMap[itemId] = Map<String, dynamic>.from(inserted);
       }
 
@@ -288,7 +336,8 @@ class _ScheduleAnnouncementScreenState
       await _rescheduleAllEnabledReminders();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        AppNotice.show(
+          context,
           SnackBar(
             content: Text(
               enabled
@@ -300,7 +349,8 @@ class _ScheduleAnnouncementScreenState
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        AppNotice.show(
+          context,
           SnackBar(content: Text('Không thể lưu nhắc nhở: $e')),
         );
       }
@@ -349,6 +399,7 @@ class _ScheduleAnnouncementScreenState
   }
 
   Future<void> _rescheduleAllEnabledReminders() async {
+    if (!_notificationsInitialized || _permissionGranted == false) return;
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return;
 
@@ -365,28 +416,24 @@ class _ScheduleAnnouncementScreenState
       final reminder = _remindersBySchedule[scheduleId];
       if (reminder == null || reminder['is_enabled'] != true) continue;
 
-      final days = _parseDays(schedule['day_of_week']);
       final startTime = _parseTime(schedule['start_time']);
-      final startDate = _parseDate(schedule['start_date']);
-      final endDate = _parseDate(schedule['end_date']);
-      if (days.isEmpty || startTime == null || startDate == null || endDate == null) {
-        continue;
-      }
+      if (startTime == null) continue;
 
-      final minutes = int.tryParse(reminder['remind_before_minutes']?.toString() ?? '') ?? 15;
-      final subject = schedule['subjects'] is Map ? Map<String, dynamic>.from(schedule['subjects'] as Map) : <String, dynamic>{};
+      final minutes =
+          int.tryParse(reminder['remind_before_minutes']?.toString() ?? '') ??
+              15;
+      final subject = schedule['subjects'] is Map
+          ? Map<String, dynamic>.from(schedule['subjects'] as Map)
+          : <String, dynamic>{};
       final subjectName = subject['subject_name']?.toString() ?? 'Môn học';
 
       for (var offset = 0; offset < 30; offset++) {
-        final date = DateTime(now.year, now.month, now.day).add(Duration(days: offset));
-        final normalizedStart = DateTime(startDate.year, startDate.month, startDate.day);
-        final normalizedEnd = DateTime(endDate.year, endDate.month, endDate.day);
-        if (date.isBefore(normalizedStart) || date.isAfter(normalizedEnd)) continue;
+        final date =
+            DateTime(now.year, now.month, now.day).add(Duration(days: offset));
+        if (!ScheduleRecurrence.occursOn(schedule, date)) continue;
 
-        final appDay = date.weekday + 1;
-        if (!days.contains(appDay)) continue;
-
-        final classStart = tz.TZDateTime(tz.local, date.year, date.month, date.day, startTime.hour, startTime.minute);
+        final classStart = tz.TZDateTime(tz.local, date.year, date.month,
+            date.day, startTime.hour, startTime.minute);
         final notifyAt = classStart.subtract(Duration(minutes: minutes));
         if (!notifyAt.isAfter(now)) continue;
 
@@ -394,7 +441,8 @@ class _ScheduleAnnouncementScreenState
           _PendingReminder(
             id: _notificationId(scheduleId, date),
             title: 'Sắp đến giờ học: $subjectName',
-            body: 'Bắt đầu lúc ${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}. Còn $minutes phút nữa.',
+            body:
+                'Bắt đầu lúc ${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}. Còn $minutes phút nữa.',
             scheduledDate: notifyAt,
           ),
         );
@@ -413,11 +461,16 @@ class _ScheduleAnnouncementScreenState
       final examDate = _parseDate(exam['exam_date']);
       if (startTime == null || examDate == null) continue;
 
-      final minutes = int.tryParse(reminder['remind_before_minutes']?.toString() ?? '') ?? 15;
-      final subject = exam['subjects'] is Map ? Map<String, dynamic>.from(exam['subjects'] as Map) : <String, dynamic>{};
+      final minutes =
+          int.tryParse(reminder['remind_before_minutes']?.toString() ?? '') ??
+              15;
+      final subject = exam['subjects'] is Map
+          ? Map<String, dynamic>.from(exam['subjects'] as Map)
+          : <String, dynamic>{};
       final subjectName = subject['subject_name']?.toString() ?? 'Môn học';
 
-      final examStart = tz.TZDateTime(tz.local, examDate.year, examDate.month, examDate.day, startTime.hour, startTime.minute);
+      final examStart = tz.TZDateTime(tz.local, examDate.year, examDate.month,
+          examDate.day, startTime.hour, startTime.minute);
       final notifyAt = examStart.subtract(Duration(minutes: minutes));
       if (!notifyAt.isAfter(now)) continue;
 
@@ -425,7 +478,8 @@ class _ScheduleAnnouncementScreenState
         _PendingReminder(
           id: _notificationId(examId, examDate),
           title: 'Sắp đến giờ kiểm tra: $subjectName',
-          body: 'Bắt đầu lúc ${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}. Còn $minutes phút nữa.',
+          body:
+              'Bắt đầu lúc ${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}. Còn $minutes phút nữa.',
           scheduledDate: notifyAt,
         ),
       );
@@ -464,8 +518,13 @@ class _ScheduleAnnouncementScreenState
 
   String _formatDays(dynamic rawDays) {
     const names = {
-      2: 'Thứ 2', 3: 'Thứ 3', 4: 'Thứ 4', 5: 'Thứ 5',
-      6: 'Thứ 6', 7: 'Thứ 7', 8: 'Chủ nhật',
+      2: 'Thứ 2',
+      3: 'Thứ 3',
+      4: 'Thứ 4',
+      5: 'Thứ 5',
+      6: 'Thứ 6',
+      7: 'Thứ 7',
+      8: 'Chủ nhật',
     };
     final days = _parseDays(rawDays)..sort();
     return days.map((day) => names[day] ?? '').join(', ');
@@ -477,289 +536,215 @@ class _ScheduleAnnouncementScreenState
     return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Thiết lập nhắc nhở lịch'),
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        foregroundColor: isDark ? Colors.white : Colors.black,
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Colors.blueAccent,
-          unselectedLabelColor: Colors.grey,
-          indicatorColor: Colors.blueAccent,
-          tabs: const [
-            Tab(text: 'Lịch học'),
-            Tab(text: 'Lịch kiểm tra'),
-          ],
-        ),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_error!, textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: _loadScreen,
-                child: const Text('Thử lại'),
-              ),
-            ],
-          ),
-        ),
-      )
-          : TabBarView(
-        controller: _tabController,
-        children: [
-          // TAB 1: ĐẶT THÔNG BÁO LỊCH HỌC
-          Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: TextField(
-                  controller: _scheduleSearchController,
-                  style: TextStyle(
-                    color: isDark ? Colors.white : Colors.black87, // Màu chữ khi gõ
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Tìm kiếm lịch học (tên môn, mã, phòng)...',
-                    hintStyle: TextStyle(
-                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, // Màu chữ gợi ý
-                    ),
-                    prefixIcon: Icon(
-                      Icons.search,
-                      color: isDark ? Colors.blue.shade300 : Colors.blueAccent,
-                    ),
-                    suffixIcon: _scheduleSearchController.text.isNotEmpty
-                        ? IconButton(
-                      icon: Icon(
-                        Icons.clear,
-                        color: isDark ? Colors.white70 : Colors.black54,
-                      ),
-                      onPressed: () => _scheduleSearchController.clear(),
-                    )
+  Future<void> _chooseMinutes(Map<String, dynamic> item, bool exam) async {
+    final selected = await showDialog<int>(
+        context: context,
+        builder: (context) =>
+            SimpleDialog(title: const Text('Nhắc trước'), children: [
+              for (final minutes in _reminderOptions)
+                ListTile(
+                    title: Text('$minutes phút'),
+                    trailing: minutes == _minutesFor(item, isExam: exam)
+                        ? const Icon(Icons.check)
                         : null,
-                    filled: true,
-                    // Màu nền linh hoạt theo Light/Dark Mode
-                    fillColor: isDark ? const Color(0xFF1F1F1F) : Colors.grey.shade100,
-
-                    // Định nghĩa đường viền để không bị cứng nhắc màu sắc
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none, // Bỏ viền cứng nếu muốn thanh tìm kiếm dạng phẳng hiện đại
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(
-                        color: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
-                        width: 1,
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(
-                        color: Colors.blueAccent,
-                        width: 1.5,
-                      ),
-                    ),
-                    isDense: true,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: _filteredSchedules.isEmpty
-                    ? const Center(child: Text('Không tìm thấy lịch học phù hợp.'))
-                    : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: _filteredSchedules.length,
-                  itemBuilder: (context, index) {
-                    final schedule = _filteredSchedules[index];
-                    final subject = schedule['subjects'] is Map
-                        ? Map<String, dynamic>.from(schedule['subjects'] as Map)
-                        : <String, dynamic>{};
-                    final enabled = _isEnabled(schedule, isExam: false);
-                    final minutes = _minutesFor(schedule, isExam: false);
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              subject['subject_name']?.toString() ?? 'Môn học chưa xác định',
-                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.blueAccent),
-                            ),
-                            if (subject['subject_code'] != null)
-                              Text('Mã môn: ${subject['subject_code']}'),
-                            const SizedBox(height: 6),
-                            Text(
-                              '${_formatDays(schedule['day_of_week'])}\n'
-                                  '${_formatTime(schedule['start_time'])} - ${_formatTime(schedule['end_time'])}',
-                            ),
-                            if (schedule['room'] != null && schedule['room'].toString().isNotEmpty)
-                              Text('Phòng: ${schedule['room']}'),
-                            const Divider(height: 24),
-                            Row(
-                              children: [
-                                const Expanded(child: Text('Bật nhắc nhở', style: TextStyle(fontWeight: FontWeight.w600))),
-                                Switch(
-                                  value: enabled,
-                                  activeColor: Colors.white,
-                                  activeTrackColor: Colors.blue,
-                                  onChanged: _saving ? null : (value) => _saveReminder(schedule, minutes: minutes, enabled: value, isExam: false),
-                                ),
-                              ],
-                            ),
-                            Row(
-                              children: [
-                                const Expanded(child: Text('Nhắc trước giờ học')),
-                                DropdownButton<int>(
-                                  value: minutes,
-                                  items: _reminderOptions.map((value) => DropdownMenuItem<int>(value: value, child: Text('$value phút'))).toList(),
-                                  onChanged: _saving ? null : (value) {
-                                    if (value == null) return;
-                                    _saveReminder(schedule, minutes: value, enabled: enabled, isExam: false);
-                                  },
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-
-          // TAB 2: ĐẶT THÔNG BÁO LỊCH KIỂM TRA
-          Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: TextField(
-                  controller: _examSearchController,
-                  decoration: InputDecoration(
-                    hintText: 'Tìm kiếm lịch kiểm tra (tên môn, phòng thi, giám thị)...',
-                    prefixIcon: const Icon(Icons.search, color: Colors.orange),
-                    suffixIcon: _examSearchController.text.isNotEmpty
-                        ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () => _examSearchController.clear(),
-                    )
-                        : null,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    filled: true,
-                    fillColor: Colors.grey.shade100,
-                    isDense: true,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: _filteredExams.isEmpty
-                    ? const Center(child: Text('Không tìm thấy lịch kiểm tra phù hợp.'))
-                    : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: _filteredExams.length,
-                  itemBuilder: (context, index) {
-                    final exam = _filteredExams[index];
-                    final subject = exam['subjects'] is Map
-                        ? Map<String, dynamic>.from(exam['subjects'] as Map)
-                        : <String, dynamic>{};
-                    final enabled = _isEnabled(exam, isExam: true);
-                    final minutes = _minutesFor(exam, isExam: true);
-
-                    String examDateStr = '';
-                    if (exam['exam_date'] != null) {
-                      try {
-                        examDateStr = DateFormat('dd/MM/yyyy').format(DateTime.parse(exam['exam_date']));
-                      } catch (_) {}
-                    }
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Kiểm tra: ${subject['subject_name']?.toString() ?? 'Môn học'}',
-                              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.orange.shade800),
-                            ),
-                            if (subject['subject_code'] != null)
-                              Text('Mã môn: ${subject['subject_code']}'),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Ngày thi: $examDateStr\n'
-                                  '${_formatTime(exam['start_time'])} - ${_formatTime(exam['end_time'])}',
-                            ),
-                            if (exam['room'] != null && exam['room'].toString().isNotEmpty)
-                              Text('Phòng thi: ${exam['room']}'),
-                            if (exam['supervisor'] != null && exam['supervisor'].toString().isNotEmpty)
-                              Text('Giám thị: ${exam['supervisor']}'),
-                            const Divider(height: 24),
-                            Row(
-                              children: [
-                                const Expanded(child: Text('Bật nhắc nhở', style: TextStyle(fontWeight: FontWeight.w600))),
-                                Switch(
-                                  value: enabled,
-                                  activeColor: Colors.white,
-                                  activeTrackColor: Colors.orange,
-                                  onChanged: _saving ? null : (value) => _saveReminder(exam, minutes: minutes, enabled: value, isExam: true),
-                                ),
-                              ],
-                            ),
-                            Row(
-                              children: [
-                                const Expanded(child: Text('Nhắc trước giờ thi')),
-                                DropdownButton<int>(
-                                  value: minutes,
-                                  items: _reminderOptions.map((value) => DropdownMenuItem<int>(value: value, child: Text('$value phút'))).toList(),
-                                  onChanged: _saving ? null : (value) {
-                                    if (value == null) return;
-                                    _saveReminder(exam, minutes: value, enabled: enabled, isExam: true);
-                                  },
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      bottomNavigationBar: _saving ? const LinearProgressIndicator(minHeight: 3) : null,
-    );
+                    onTap: () => Navigator.pop(context, minutes))
+            ]));
+    if (selected != null && mounted) {
+      await _saveReminder(item, minutes: selected, enabled: true, isExam: exam);
+    }
   }
+
+  String _remindTime(Map<String, dynamic> item, int minutes) {
+    final time = _parseTime(item['start_time']);
+    if (time == null) return '';
+    final value = time.hour * 60 + time.minute - minutes;
+    final normalized = (value + 1440) % 1440;
+    return '${(normalized ~/ 60).toString().padLeft(2, '0')}:${(normalized % 60).toString().padLeft(2, '0')}${value < 0 ? ' hôm trước' : ''}';
+  }
+
+  Widget _reminderCard(Map<String, dynamic> item, bool exam) {
+    final enabled = _isEnabled(item, isExam: exam),
+        minutes = _minutesFor(item, isExam: exam);
+    final label = (item['category'] ?? '').toString();
+    final subject = item['subjects'] as Map? ?? {};
+    final rule = ScheduleRecurrence.frequency(item);
+    final date = exam
+        ? DateFormat('dd/MM/yyyy').format(DateTime.parse(item['exam_date']))
+        : rule == 'weekly'
+            ? _formatDays(item['day_of_week'])
+            : rule == 'none'
+                ? (item['start_date'] == null
+                    ? ''
+                    : DateFormat('dd/MM/yyyy')
+                        .format(DateTime.parse(item['start_date'])))
+                : ScheduleRecurrence.labels[rule];
+    return Card(
+        elevation: 0,
+        margin: const EdgeInsets.only(bottom: 12),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant)),
+        child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: _saving ? null : () => _chooseMinutes(item, exam),
+            child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Expanded(
+                            child: Text(subject['subject_name'] ?? 'Môn học',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16))),
+                        Switch(
+                            value: enabled,
+                            onChanged: _saving
+                                ? null
+                                : (v) => _saveReminder(item,
+                                    minutes: minutes, enabled: v, isExam: exam))
+                      ]),
+                      if (label.isNotEmpty)
+                        Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                    color: _categoryStore
+                                        .colorOf(label)
+                                        .withValues(alpha: .15),
+                                    borderRadius: BorderRadius.circular(8)),
+                                child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.label,
+                                          size: 16,
+                                          color: _categoryStore.colorOf(label)),
+                                      const SizedBox(width: 5),
+                                      Flexible(child: Text(label))
+                                    ]))),
+                      Text(
+                          '$date · ${_formatTime(item['start_time'])}–${_formatTime(item['end_time'])}'),
+                      const SizedBox(height: 8),
+                      Text(
+                          enabled
+                              ? 'Nhắc trước $minutes phút · ${_remindTime(item, minutes)}'
+                              : 'Đang tắt · Nhắc trước $minutes phút',
+                          style: TextStyle(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant)),
+                    ]))));
+  }
+
+  Widget _list(bool exam) {
+    final items = exam ? _filteredExams : _filteredSchedules;
+    return ListView(padding: const EdgeInsets.all(20), children: [
+      DropdownButtonFormField<int>(
+          key: ValueKey('$_defaultMinutes-$_defaultVersion'),
+          initialValue: _defaultMinutes,
+          isExpanded: true,
+          decoration: const InputDecoration(
+              labelText: 'Mặc định cho nhắc nhở mới',
+              border: OutlineInputBorder()),
+          items: _reminderOptions
+              .map((m) =>
+                  DropdownMenuItem(value: m, child: Text('Nhắc trước $m phút')))
+              .toList(),
+          onChanged: _saving
+              ? null
+              : (v) async {
+                  if (v == null || v == _defaultMinutes) return;
+                  final old = _defaultMinutes;
+                  if (!await confirmAction(context,
+                          message:
+                              'Dùng mặc định nhắc trước $v phút cho các nhắc nhở mới?') ||
+                      !mounted) {
+                    if (mounted) {
+                      setState(() {
+                        _defaultMinutes = old;
+                        _defaultVersion++;
+                      });
+                    }
+                    return;
+                  }
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setInt(
+                      'reminder_default_${_supabase.auth.currentUser?.id}', v);
+                  if (mounted) setState(() => _defaultMinutes = v);
+                }),
+      if (_notificationNotice != null || _permissionGranted == false)
+        Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(_notificationNotice ??
+                  'Thông báo chưa được bật. Cho phép thông báo trong cài đặt thiết bị.'),
+              if (_mobile)
+                TextButton(
+                    onPressed: _requestPermission,
+                    child: const Text('Cho phép thông báo')),
+            ])),
+      const SizedBox(height: 20),
+      TextField(
+          controller: exam ? _examSearchController : _scheduleSearchController,
+          decoration: const InputDecoration(
+              hintText: 'Tìm môn học',
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder())),
+      const SizedBox(height: 16),
+      if (items.isEmpty)
+        const Padding(
+            padding: EdgeInsets.all(20),
+            child: Text('Chưa có lịch phù hợp để đặt nhắc nhở.')),
+      for (final item in items) _reminderCard(item, exam),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
+        appBar: AppBar(
+            title: const Text('Nhắc nhở'),
+            actions: [
+              IconButton(
+                  tooltip: 'Làm mới',
+                  onPressed: _saving ? null : _loadScreen,
+                  icon: const Icon(Icons.refresh))
+            ],
+            bottom: TabBar(
+                controller: _tabController,
+                tabs: const [Tab(text: 'Lịch học'), Tab(text: 'Kiểm tra')])),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? Center(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Text(_error!)),
+                    TextButton(
+                        onPressed: _loadScreen, child: const Text('Thử lại'))
+                  ]))
+                : Center(
+                    child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 640),
+                        child: TabBarView(
+                            controller: _tabController,
+                            children: [_list(false), _list(true)]))),
+      );
 }
 
 class _PendingReminder {
+  const _PendingReminder(
+      {required this.id,
+      required this.title,
+      required this.body,
+      required this.scheduledDate});
   final int id;
-  final String title;
-  final String body;
+  final String title, body;
   final tz.TZDateTime scheduledDate;
-
-  const _PendingReminder({
-    required this.id,
-    required this.title,
-    required this.body,
-    required this.scheduledDate,
-  });
 }

@@ -1,598 +1,399 @@
-
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/study_statistics.dart';
+import 'view_schedule_screen.dart';
 
 class StatisticalScreen extends StatefulWidget {
-  const StatisticalScreen({super.key});
-
+  const StatisticalScreen({super.key, this.loadSchedules, this.initialDate});
+  final Future<List<Map<String, dynamic>>> Function()? loadSchedules;
+  final DateTime? initialDate;
   @override
-  State<StatisticalScreen> createState() =>
-      _StatisticalScreenState();
+  State<StatisticalScreen> createState() => _StatisticalScreenState();
 }
 
 class _StatisticalScreenState extends State<StatisticalScreen> {
-  final SupabaseClient supabase = Supabase.instance.client;
-
-  bool isLoading = true;
-  bool showPeriods = false;
-  String? errorMessage;
-
-  List<Map<String, dynamic>> statistics = [];
-
-  int totalSessions = 0;
-  int totalPeriods = 0;
-
-  DateTime get today {
-    final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day);
-  }
-
-  DateTime get weekStart =>
-      today.subtract(Duration(days: today.weekday - 1));
-
-  DateTime get weekEnd =>
-      weekStart.add(const Duration(days: 6));
-
+  List<Map<String, dynamic>> _rows = [];
+  bool _loading = true, _month = false;
+  String? _error;
+  late DateTime _anchor;
+  DateTime? _selected;
   @override
   void initState() {
     super.initState();
-    loadStatistics();
+    _anchor = widget.initialDate ?? DateTime.now();
+    _load();
   }
 
-  Future<void> loadStatistics() async {
-    if (!mounted) return;
-
+  DateTime get _start => _month
+      ? DateTime(_anchor.year, _anchor.month)
+      : DateTime(
+          _anchor.year, _anchor.month, _anchor.day - _anchor.weekday + 1);
+  DateTime get _end => _month
+      ? DateTime(_anchor.year, _anchor.month + 1, 0)
+      : DateTime(_start.year, _start.month, _start.day + 6);
+  Future<void> _load() async {
     setState(() {
-      isLoading = true;
-      errorMessage = null;
+      _loading = true;
+      _error = null;
     });
-
     try {
-      final userId = supabase.auth.currentUser?.id;
-
-      if (userId == null) {
-        throw Exception(
-          'Bạn cần đăng nhập để xem thống kê.',
-        );
+      List<Map<String, dynamic>> rows;
+      if (widget.loadSchedules != null) {
+        rows = await widget.loadSchedules!();
+      } else {
+        final client = Supabase.instance.client,
+            user = Supabase.instance.client.auth.currentUser;
+        if (user == null) throw Exception('Bạn cần đăng nhập để xem thống kê.');
+        rows = List<Map<String, dynamic>>.from(await client
+            .from('schedules')
+            .select('*, subjects(subject_name)')
+            .eq('user_id', user.id));
       }
-
-      final response = await supabase
-          .from('schedules')
-          .select(
-        'id, subject_id, day_of_week, periods_count, '
-            'start_date, end_date, '
-            'subjects(subject_name, subject_code, color_code)',
-      )
-          .eq('user_id', userId);
-
-      final Map<String, Map<String, dynamic>> result = {};
-
-      int sessionsSum = 0;
-      int periodsSum = 0;
-
-      for (final raw in response) {
-        final schedule = Map<String, dynamic>.from(raw);
-
-        final subjectId =
-        schedule['subject_id']?.toString();
-
-        if (subjectId == null) continue;
-
-        final startDate = _parseDate(schedule['start_date']);
-        final endDate = _parseDate(schedule['end_date']);
-
-        // Bỏ qua lịch nằm ngoài tuần hiện tại.
-        if (startDate != null &&
-            startDate.isAfter(weekEnd)) {
-          continue;
-        }
-
-        if (endDate != null &&
-            endDate.isBefore(weekStart)) {
-          continue;
-        }
-
-        final firstDate =
-        startDate == null || startDate.isBefore(weekStart)
-            ? weekStart
-            : startDate;
-
-        final lastDate =
-        endDate == null || endDate.isAfter(weekEnd)
-            ? weekEnd
-            : endDate;
-
-        final sessions = countSessions(
-          schedule['day_of_week'],
-          firstDate,
-          lastDate,
-        );
-
-        if (sessions == 0) continue;
-
-        final periodsPerSession =
-            _toInt(schedule['periods_count']) ?? 0;
-
-        final periods = sessions * periodsPerSession;
-
-        final subjectRaw = schedule['subjects'];
-        final subject = subjectRaw is Map
-            ? Map<String, dynamic>.from(subjectRaw)
-            : <String, dynamic>{};
-
-        final item = result.putIfAbsent(subjectId, () {
-          return {
-            'subject_id': subjectId,
-            'subject_name':
-            subject['subject_name']?.toString() ??
-                'Môn học chưa đặt tên',
-            'subject_code':
-            subject['subject_code']?.toString() ?? '',
-            'color_code':
-            subject['color_code']?.toString() ?? '#4776E6',
-            'sessions': 0,
-            'periods': 0,
-          };
+      if (mounted) {
+        setState(() {
+          _rows = rows;
+          _loading = false;
         });
-
-        item['sessions'] =
-            (item['sessions'] as int) + sessions;
-
-        item['periods'] =
-            (item['periods'] as int) + periods;
-
-        sessionsSum += sessions;
-        periodsSum += periods;
       }
-
-      final sortedStatistics = result.values.toList()
-        ..sort((a, b) => (a['subject_name'] as String)
-            .toLowerCase()
-            .compareTo(
-          (b['subject_name'] as String).toLowerCase(),
-        ));
-
-      if (!mounted) return;
-
-      setState(() {
-        statistics = sortedStatistics;
-        totalSessions = sessionsSum;
-        totalPeriods = periodsSum;
-        isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        errorMessage = e.toString();
-        isLoading = false;
-      });
-    }
-  }
-
-  // Quy ước của ứng dụng:
-  // Thứ 2 = 2, Thứ 3 = 3, ..., Chủ nhật = 8.
-  int countSessions(
-      dynamic rawDays,
-      DateTime firstDate,
-      DateTime lastDate,
-      ) {
-    final Set<int> days = {};
-
-    if (rawDays is List) {
-      for (final value in rawDays) {
-        final day = int.tryParse(value.toString());
-        if (day != null) days.add(day);
-      }
-    } else if (rawDays != null) {
-      final day = int.tryParse(rawDays.toString());
-      if (day != null) days.add(day);
-    }
-
-    if (days.isEmpty || firstDate.isAfter(lastDate)) {
-      return 0;
-    }
-
-    int count = 0;
-
-    for (
-    DateTime date = firstDate;
-    !date.isAfter(lastDate);
-    date = date.add(const Duration(days: 1))
-    ) {
-      // DateTime.weekday: Thứ 2 = 1, Chủ nhật = 7.
-      // Dữ liệu của ứng dụng cộng thêm 1.
-      if (days.contains(date.weekday + 1)) {
-        count++;
-      }
-    }
-
-    return count;
-  }
-
-  DateTime? _parseDate(dynamic value) {
-    if (value == null) return null;
-
-    try {
-      final date = DateTime.parse(value.toString());
-      return DateTime(date.year, date.month, date.day);
     } catch (_) {
-      return null;
+      if (mounted) {
+        setState(() {
+          _error =
+              'Không tải được thống kê. Kiểm tra kết nối hoặc đăng nhập lại.';
+          _loading = false;
+        });
+      }
     }
   }
 
-  int? _toInt(dynamic value) {
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    return int.tryParse(value?.toString() ?? '');
+  void _move(int direction) => setState(() {
+        _anchor = _month
+            ? DateTime(_anchor.year, _anchor.month + direction)
+            : DateTime(
+                _anchor.year, _anchor.month, _anchor.day + 7 * direction);
+        _selected = null;
+      });
+  Future<void> _openDay(DateTime date) async {
+    await Navigator.of(context).push(PageRouteBuilder<void>(
+        pageBuilder: (_, animation, secondary) =>
+            ViewScheduleScreen(initialDate: date),
+        transitionDuration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 380),
+        transitionsBuilder: (_, animation, secondary, child) => FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(
+                scale: Tween<double>(begin: .96, end: 1).animate(
+                    CurvedAnimation(
+                        parent: animation, curve: Curves.easeOutCubic)),
+                child: child))));
+    if (mounted) await _load();
   }
 
-  Color parseColor(String? value) {
-    if (value == null || value.isEmpty) {
-      return const Color(0xFF4776E6);
-    }
-
-    String hex = value.replaceAll('#', '');
-
-    if (hex.length == 6) {
-      hex = 'FF$hex';
-    }
-
-    final colorValue = int.tryParse(hex, radix: 16);
-
-    return colorValue == null
-        ? const Color(0xFF4776E6)
-        : Color(colorValue);
-  }
-
-  String formatDate(DateTime date) {
-    return '${date.day.toString().padLeft(2, '0')}/'
-        '${date.month.toString().padLeft(2, '0')}';
+  Widget _metric(String value, String label) => Expanded(
+          child: Column(children: [
+        FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(value,
+                style: const TextStyle(
+                    fontSize: 24, fontWeight: FontWeight.w600))),
+        const SizedBox(height: 4),
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+      ]));
+  Widget _chart(StudyStatistics stats) {
+    final entries = stats.dailyMinutes.entries.toList();
+    final maxMinutes =
+        math.max(60, entries.fold<int>(0, (a, b) => math.max(a, b.value)));
+    final ceiling = (maxMinutes / 60).ceil() * 60;
+    final color = Theme.of(context).colorScheme;
+    return SizedBox(
+        height: 205,
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          SizedBox(
+              width: 40,
+              child: Padding(
+                  padding: const EdgeInsets.only(bottom: 32),
+                  child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${ceiling ~/ 60} giờ',
+                            style: Theme.of(context).textTheme.labelSmall),
+                        Text(
+                            '${ceiling / 120 == (ceiling / 120).roundToDouble() ? ceiling ~/ 120 : (ceiling / 120).toStringAsFixed(1)}',
+                            style: Theme.of(context).textTheme.labelSmall),
+                        const Text('0')
+                      ]))),
+          Expanded(
+              child: LayoutBuilder(
+                  builder: (context, box) => GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTapUp: (details) {
+                          final index = (details.localPosition.dx /
+                                  box.maxWidth *
+                                  entries.length)
+                              .floor()
+                              .clamp(0, entries.length - 1);
+                          setState(() => _selected = entries[index].key);
+                        },
+                        child: Stack(children: [
+                          Positioned(
+                              left: 0,
+                              right: 0,
+                              top: 0,
+                              child: Divider(
+                                  height: 1, color: color.outlineVariant)),
+                          Positioned(
+                              left: 0,
+                              right: 0,
+                              top: 86,
+                              child: Divider(
+                                  height: 1, color: color.outlineVariant)),
+                          Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 32,
+                              child: Divider(
+                                  height: 1, color: color.outlineVariant)),
+                          Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                for (var i = 0; i < entries.length; i++)
+                                  Expanded(
+                                      child: Semantics(
+                                          label:
+                                              '${DateFormat('dd/MM/yyyy').format(entries[i].key)}, ${StudyStatistics.duration(entries[i].value)}',
+                                          button: true,
+                                          onTap: () => setState(
+                                              () => _selected = entries[i].key),
+                                          child: Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.end,
+                                              children: [
+                                                AnimatedContainer(
+                                                    duration: MediaQuery
+                                                            .disableAnimationsOf(
+                                                                context)
+                                                        ? Duration.zero
+                                                        : const Duration(
+                                                            milliseconds: 380),
+                                                    height: entries[i].value /
+                                                        ceiling *
+                                                        172,
+                                                    width: _month ? 6 : 24,
+                                                    decoration: BoxDecoration(
+                                                        color: _selected ==
+                                                                entries[i].key
+                                                            ? color.primary
+                                                            : color.primary
+                                                                .withValues(
+                                                                    alpha: .65),
+                                                        borderRadius:
+                                                            const BorderRadius.vertical(
+                                                                top: Radius.circular(
+                                                                    4)))),
+                                                SizedBox(
+                                                    height: 32,
+                                                    child: Center(
+                                                        child: Text(
+                                                            _month
+                                                                ? (i == 0 ||
+                                                                        (i + 1) %
+                                                                                5 ==
+                                                                            0
+                                                                    ? '${i + 1}'
+                                                                    : '')
+                                                                : [
+                                                                    'T2',
+                                                                    'T3',
+                                                                    'T4',
+                                                                    'T5',
+                                                                    'T6',
+                                                                    'T7',
+                                                                    'CN'
+                                                                  ][i],
+                                                            style: TextStyle(
+                                                                fontSize: _month
+                                                                    ? 10
+                                                                    : 12)))),
+                                              ]))),
+                              ]),
+                        ]),
+                      ))),
+        ]));
   }
 
   @override
   Widget build(BuildContext context) {
+    final stats = StudyStatistics(_rows, _start, _end);
+    final sorted = stats.subjects.values.toList()
+      ..sort((a, b) => b.minutes.compareTo(a.minutes));
+    final selected = _selected ??
+        stats.dailySessions.entries
+            .firstWhere((e) => e.value > 0,
+                orElse: () => stats.dailySessions.entries.first)
+            .key;
+    final color = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Thống kê lịch học'),
-        actions: [
+        appBar: AppBar(title: const Text('Thống kê lịch học'), actions: [
           IconButton(
-            onPressed: isLoading ? null : loadStatistics,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Tải lại',
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: loadStatistics,
-        child: _buildBody(),
-      ),
-    );
-  }
-
-  Widget _buildBody() {
-    if (isLoading) {
-      return ListView(
-        children: const [
-          SizedBox(height: 220),
-          Center(child: CircularProgressIndicator()),
-        ],
-      );
-    }
-
-    if (errorMessage != null) {
-      return ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          const Icon(
-            Icons.error_outline,
-            color: Colors.red,
-            size: 48,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Không tải được thống kê:\n$errorMessage',
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          Center(
-            child: ElevatedButton(
-              onPressed: loadStatistics,
-              child: const Text('Thử lại'),
-            ),
-          ),
-        ],
-      );
-    }
-
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
-      children: [
-        _buildWeekHeader(),
-        const SizedBox(height: 16),
-
-        Row(
-          children: [
-            Expanded(
-              child: _buildSummaryCard(
-                title: 'Số buổi học',
-                value: totalSessions,
-                icon: Icons.event_available,
-                color: const Color(0xFF4776E6),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildSummaryCard(
-                title: 'Số tiết học',
-                value: totalPeriods,
-                icon: Icons.menu_book,
-                color: const Color(0xFF11998E),
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 24),
-
-        const Text(
-          'Thống kê theo môn học',
-          style: TextStyle(
-            fontSize: 19,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment<bool>(
-              value: false,
-              label: Text('Số buổi'),
-              icon: Icon(Icons.event),
-            ),
-            ButtonSegment<bool>(
-              value: true,
-              label: Text('Số tiết'),
-              icon: Icon(Icons.menu_book),
-            ),
-          ],
-          selected: {showPeriods},
-          onSelectionChanged: (selection) {
-            setState(() {
-              showPeriods = selection.first;
-            });
-          },
-        ),
-
-        const SizedBox(height: 12),
-
-        if (statistics.isEmpty)
-          _buildEmptyState()
-        else
-          ...statistics.map(_buildSubjectCard),
-
-        const SizedBox(height: 16),
-
-        Text(
-          'Thống kê từ ${formatDate(weekStart)} đến '
-              '${formatDate(weekEnd)}. Số buổi được tính theo '
-              'ngày học và khoảng thời gian của từng lịch.',
-          style: TextStyle(
-            color: Colors.grey.shade600,
-            fontSize: 12,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWeekHeader() {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: const LinearGradient(
-          colors: [
-            Color(0xFF4776E6),
-            Color(0xFF6A5AE0),
-          ],
-        ),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.calendar_month,
-            color: Colors.white,
-            size: 34,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Tuần hiện tại',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  '${formatDate(weekStart)} - '
-                      '${formatDate(weekEnd)}',
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSummaryCard({
-    required String title,
-    required int value,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Card(
-      elevation: 0,
-      color: color.withOpacity(0.10),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(height: 12),
-            Text(
-              '$value',
-              style: TextStyle(
-                fontSize: 30,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-            Text(title),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSubjectCard(Map<String, dynamic> item) {
-    final int value = showPeriods
-        ? item['periods'] as int
-        : item['sessions'] as int;
-
-    final int total = showPeriods
-        ? totalPeriods
-        : totalSessions;
-
-    final double ratio =
-    total == 0 ? 0 : value / total;
-
-    final color = parseColor(
-      item['color_code']?.toString(),
-    );
-
-    final name =
-        item['subject_name']?.toString() ?? 'Môn học';
-
-    final code =
-        item['subject_code']?.toString() ?? '';
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: Colors.grey.shade300),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    Icons.menu_book,
-                    color: color,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (code.isNotEmpty)
-                        Text(
-                          code,
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 12,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                Text(
-                  '$value ${showPeriods ? 'tiết' : 'buổi'}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: LinearProgressIndicator(
-                value: ratio.clamp(0.0, 1.0),
-                minHeight: 7,
-                backgroundColor: color.withOpacity(0.12),
-                valueColor:
-                AlwaysStoppedAnimation<Color>(color),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 36),
-      child: Column(
-        children: [
-          Icon(
-            Icons.event_busy,
-            size: 56,
-            color: Colors.grey.shade500,
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Chưa có lịch học trong tuần này',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Hãy thêm lịch học hoặc kiểm tra ngày bắt đầu, '
-                'ngày kết thúc và ngày học của lịch.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey.shade600),
-          ),
-        ],
-      ),
-    );
+              tooltip: 'Làm mới',
+              onPressed: _loading ? null : _load,
+              icon: const Icon(Icons.refresh))
+        ]),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? Center(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(_error!, textAlign: TextAlign.center)),
+                    TextButton(onPressed: _load, child: const Text('Thử lại'))
+                  ]))
+                : Center(
+                    child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 640),
+                        child: RefreshIndicator(
+                            onRefresh: _load,
+                            child: ListView(
+                                padding: const EdgeInsets.all(20),
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                children: [
+                                  SegmentedButton<bool>(
+                                      segments: const [
+                                        ButtonSegment(
+                                            value: false, label: Text('Tuần')),
+                                        ButtonSegment(
+                                            value: true, label: Text('Tháng'))
+                                      ],
+                                      selected: {
+                                        _month
+                                      },
+                                      onSelectionChanged: (v) => setState(() {
+                                            _month = v.single;
+                                            _selected = null;
+                                          })),
+                                  const SizedBox(height: 12),
+                                  Row(children: [
+                                    IconButton(
+                                        tooltip: 'Khoảng trước',
+                                        onPressed:
+                                            _start.isAfter(DateTime(2020, 1, 7))
+                                                ? () => _move(-1)
+                                                : null,
+                                        icon: const Icon(Icons.chevron_left)),
+                                    Expanded(
+                                        child: Text(
+                                            _month
+                                                ? 'Tháng ${_anchor.month}, ${_anchor.year}'
+                                                : '${DateFormat('dd/MM/yyyy').format(_start)} – ${DateFormat('dd/MM/yyyy').format(_end)}',
+                                            textAlign: TextAlign.center)),
+                                    IconButton(
+                                        tooltip: 'Khoảng sau',
+                                        onPressed: _end.isBefore(
+                                                DateTime(2100, 12, 25))
+                                            ? () => _move(1)
+                                            : null,
+                                        icon: const Icon(Icons.chevron_right))
+                                  ]),
+                                  const SizedBox(height: 16),
+                                  Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 20),
+                                      decoration: BoxDecoration(
+                                          color: color.primaryContainer
+                                              .withValues(alpha: .35),
+                                          borderRadius:
+                                              BorderRadius.circular(16)),
+                                      child: Row(children: [
+                                        _metric(
+                                            '${stats.sessions}', 'Buổi học'),
+                                        _metric(
+                                            StudyStatistics.duration(
+                                                stats.minutes),
+                                            'Giờ học'),
+                                        _metric('${stats.subjects.length}',
+                                            'Môn học')
+                                      ])),
+                                  const SizedBox(height: 28),
+                                  Text('Phân bố giờ học',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium),
+                                  const SizedBox(height: 18),
+                                  _chart(stats),
+                                  Container(
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                          color: color.surfaceContainerLow,
+                                          borderRadius:
+                                              BorderRadius.circular(12)),
+                                      child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                                '${DateFormat('dd/MM/yyyy').format(selected)} · ${stats.dailySessions[selected] == 0 ? 'Không có lịch' : StudyStatistics.duration(stats.dailyMinutes[selected] ?? 0)}'),
+                                            TextButton(
+                                                key: const ValueKey(
+                                                    'stats-open-day'),
+                                                onPressed: () =>
+                                                    _openDay(selected),
+                                                child: const Text(
+                                                    'Xem lịch ngày này')),
+                                          ])),
+                                  const SizedBox(height: 24),
+                                  Text('Theo môn học',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium),
+                                  if (sorted.isEmpty)
+                                    const Padding(
+                                        padding:
+                                            EdgeInsets.symmetric(vertical: 20),
+                                        child: Text(
+                                            'Chưa có lịch học trong khoảng thời gian này.')),
+                                  for (final subject in sorted)
+                                    Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 14),
+                                        child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(subject.name,
+                                                  style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w600)),
+                                              const SizedBox(height: 6),
+                                              Wrap(
+                                                  alignment: WrapAlignment
+                                                      .spaceBetween,
+                                                  spacing: 16,
+                                                  children: [
+                                                    Text(
+                                                        '${subject.sessions} buổi · ${StudyStatistics.duration(subject.minutes)}'),
+                                                    Text(
+                                                        '${stats.minutes == 0 ? 0 : (subject.minutes / stats.minutes * 100).round()}% thời gian',
+                                                        style: TextStyle(
+                                                            color: color
+                                                                .onSurfaceVariant))
+                                                  ]),
+                                              const SizedBox(height: 10),
+                                              LinearProgressIndicator(
+                                                  value: stats.minutes == 0
+                                                      ? 0
+                                                      : subject.minutes /
+                                                          stats.minutes,
+                                                  minHeight: 5,
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  backgroundColor: color
+                                                      .surfaceContainerHighest),
+                                            ])),
+                                ])))));
   }
 }
