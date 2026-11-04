@@ -102,6 +102,18 @@ consume_assistant_request/account_is_active trong SQL chính.
 
 ## Kiểm thử cục bộ
 
+Chatbox giữ toàn bộ hội thoại trong lịch sử cục bộ theo tài khoản. Mỗi lần gửi,
+app chọn các lượt trao đổi gần nhất (tối đa 12 tin, nằm trong giới hạn JSON của
+máy chủ), bắt đầu từ câu hỏi của người dùng. Hội thoại quá dài không được gửi
+toàn bộ; hãy nhắc lại chi tiết quan trọng nếu AI cần. Có thể tìm lịch sử theo
+tiêu đề hoặc nội dung, mở lại để hỏi tiếp và sao chép câu trả lời. Chế độ tra cứu
+web được lưu theo cuộc trò chuyện; không tự bật tra cứu cho cuộc chat cũ.
+
+Sau khi cập nhật chỉ dẫn trả lời trong `functions/study-assistant/index.ts`,
+triển khai lại hàm `study-assistant` bằng hướng dẫn triển khai của backend.
+Tra cứu web vẫn cần `GROQ_ENABLE_SEARCH=true` và quyền công cụ phù hợp của Groq;
+không bật biến này nếu chưa kiểm tra điều kiện và chi phí trong tài khoản.
+
 ```powershell
 node --test backend/tests/study_assistant_groq.test.mjs
 .\backend\tests\check_groq_parser_test.ps1

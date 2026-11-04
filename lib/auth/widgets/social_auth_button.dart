@@ -4,7 +4,7 @@ import 'brand_icon.dart';
 
 /// Nút đăng nhập / đăng ký bằng mạng xã hội.
 ///
-/// Hiện chỉ là giao diện (placeholder), chưa nối OAuth với Supabase.
+/// Nút chọn nhà cung cấp OAuth trong màn hình đăng nhập/đăng ký.
 class SocialAuthButton extends StatelessWidget {
   const SocialAuthButton({
     super.key,
@@ -15,7 +15,7 @@ class SocialAuthButton extends StatelessWidget {
 
   final AuthProvider provider;
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {

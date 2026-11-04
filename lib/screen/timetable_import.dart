@@ -130,8 +130,9 @@ class _TimetableImportScreenState extends State<TimetableImportScreen> {
                 if (!mounted ||
                     !await confirmAction(context,
                         message:
-                            'Buổi này trùng giờ một lịch học đã có. Bạn vẫn muốn lưu?'))
+                            'Buổi này trùng giờ một lịch học đã có. Bạn vẫn muốn lưu?')) {
                   throw Exception('Đã hủy lưu buổi trùng giờ.');
+                }
               }
               await client.rpc('save_subject_schedule',
                   params: draft.toSubjectParameters());

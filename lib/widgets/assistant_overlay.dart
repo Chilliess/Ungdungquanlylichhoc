@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/app_preferences.dart';
 import '../services/chat_history.dart';
 import '../services/assistant_error.dart';
+import '../services/assistant_context.dart';
 
 final assistantPrompt = ValueNotifier<String?>(null);
 final assistantDialog = ValueNotifier<bool>(false);
@@ -38,6 +39,7 @@ class _AssistantOverlayState extends State<AssistantOverlay> {
   bool _open = false, _busy = false, _consent = false;
   bool _webSearch = false;
   bool _expanded = false;
+  String _historyQuery = '';
 
   void _handleDialog() {
     if (!mounted || _userId == null) return;
@@ -122,6 +124,7 @@ class _AssistantOverlayState extends State<AssistantOverlay> {
       'id': _threadId,
       'title': title.length > 65 ? '${title.substring(0, 65)}…' : title,
       'updated': DateTime.now().toIso8601String(),
+      'web_search': _webSearch,
       'messages': _messages.map((m) => Map<String, String>.from(m)).toList()
     };
     _threads.removeWhere((t) => t['id'] == _threadId);
@@ -134,6 +137,7 @@ class _AssistantOverlayState extends State<AssistantOverlay> {
         _messages.clear();
         _input.clear();
         _history = false;
+        _historyQuery = '';
         _error = null;
       });
 
@@ -143,11 +147,20 @@ class _AssistantOverlayState extends State<AssistantOverlay> {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
         const SizedBox(height: 6),
         const Text('Lưu riêng theo tài khoản trên thiết bị này.'),
+        const SizedBox(height: 12),
+        TextField(
+            decoration: const InputDecoration(
+                hintText: 'Tìm cuộc trò chuyện…',
+                prefixIcon: Icon(Icons.search)),
+            onChanged: (value) =>
+                setState(() => _historyQuery = value.trim().toLowerCase())),
         const SizedBox(height: 16),
         if (_loadingHistory) const LinearProgressIndicator(),
         if (!_loadingHistory && _threads.isEmpty)
           const Text('Chưa có cuộc trò chuyện nào.'),
-        for (final t in _threads)
+        if (_threads.isNotEmpty && !_threads.any(_matchesHistory))
+          const Text('Không tìm thấy cuộc trò chuyện phù hợp.'),
+        for (final t in _threads.where(_matchesHistory))
           Card(
               elevation: 0,
               child: Column(children: [
@@ -173,6 +186,7 @@ class _AssistantOverlayState extends State<AssistantOverlay> {
                                 ..addAll((t['messages'] as List).map(
                                     (m) => Map<String, String>.from(m as Map)));
                               _history = false;
+                              _webSearch = t['web_search'] == true;
                               // Opening history does not grant provider consent.
                               _error = null;
                               _input.clear();
@@ -206,6 +220,12 @@ class _AssistantOverlayState extends State<AssistantOverlay> {
                       ])),
               ])),
       ]);
+
+  bool _matchesHistory(Map<String, dynamic> thread) =>
+      _historyQuery.isEmpty ||
+      (thread['title'] as String).toLowerCase().contains(_historyQuery) ||
+      (thread['messages'] as List).any((message) =>
+          (message['content'] as String).toLowerCase().contains(_historyQuery));
 
   Widget _suggestion(
       IconData icon, String title, String subtitle, String prompt) {
@@ -265,6 +285,7 @@ class _AssistantOverlayState extends State<AssistantOverlay> {
           _threads = [];
           _threadId = null;
           _history = false;
+          _historyQuery = '';
           _deleteId = null;
         });
         _loadHistory();
@@ -303,10 +324,7 @@ class _AssistantOverlayState extends State<AssistantOverlay> {
     });
     _toBottom();
     try {
-      final history = _messages
-          .skip(math.max(0, _messages.length - 12))
-          .map((m) => Map<String, String>.from(m))
-          .toList();
+      final history = assistantContext(_messages, webSearch: _webSearch);
       final reply = await (widget.sendMessage ?? _request)(history)
           .timeout(const Duration(seconds: 45));
       if (reply.trim().isEmpty) throw const FormatException();
@@ -365,8 +383,12 @@ class _AssistantOverlayState extends State<AssistantOverlay> {
                   icon: const Icon(Icons.add_comment_outlined, size: 20)),
               IconButton(
                   tooltip: 'Lịch sử trò chuyện',
-                  onPressed:
-                      _busy ? null : () => setState(() => _history = !_history),
+                  onPressed: _busy
+                      ? null
+                      : () => setState(() {
+                            _history = !_history;
+                            _historyQuery = '';
+                          }),
                   icon: Icon(
                       _history ? Icons.chat_bubble_outline : Icons.history,
                       size: 20)),
@@ -428,7 +450,12 @@ class _AssistantOverlayState extends State<AssistantOverlay> {
                                   ? null
                                   : (value) =>
                                       setState(() => _webSearch = value)),
-                          const SizedBox(height: 8),
+                          Text(
+                              _webSearch
+                                  ? 'Yêu cầu tra cứu nguồn web. Máy chủ cần được bật tính năng này.'
+                                  : 'Đang tư vấn từ kiến thức AI và cuộc trò chuyện, chưa tra cứu web.',
+                              style: Theme.of(context).textTheme.bodySmall),
+                          const SizedBox(height: 12),
                         ],
                         for (final message in _messages)
                           Align(
@@ -443,7 +470,36 @@ class _AssistantOverlayState extends State<AssistantOverlay> {
                                           ? colors.primaryContainer
                                           : colors.surfaceContainer,
                                       borderRadius: BorderRadius.circular(14)),
-                                  child: SelectableText(message['content']!))),
+                                  child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        SelectableText(message['content']!),
+                                        if (message['role'] == 'assistant')
+                                          Align(
+                                              alignment: Alignment.centerRight,
+                                              child: IconButton(
+                                                  tooltip:
+                                                      'Sao chép câu trả lời',
+                                                  icon: const Icon(
+                                                      Icons.copy_outlined,
+                                                      size: 18),
+                                                  onPressed: () async {
+                                                    await Clipboard.setData(
+                                                        ClipboardData(
+                                                            text: message[
+                                                                'content']!));
+                                                    if (mounted) {
+                                                      ScaffoldMessenger.maybeOf(
+                                                              context)
+                                                          ?.showSnackBar(
+                                                              const SnackBar(
+                                                                  content: Text(
+                                                                      'Đã sao chép câu trả lời.')));
+                                                    }
+                                                  })),
+                                      ]))),
                         if (_busy)
                           const Row(children: [
                             SizedBox(

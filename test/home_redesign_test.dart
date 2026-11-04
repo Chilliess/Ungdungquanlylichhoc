@@ -64,6 +64,20 @@ class _RacingService extends HomeService {
   }
 }
 
+class _SwitchingService extends HomeService {
+  final changes = StreamController<String?>();
+  final nextAccount = Completer<HomeSnapshot>();
+  bool switching = false;
+  @override
+  String? get accountId => 'a';
+  @override
+  Stream<String?> get accountChanges => changes.stream;
+  @override
+  Future<HomeSnapshot> loadSnapshot({DateTime? now}) => switching
+      ? nextAccount.future
+      : Future.value(_RacingService.snapshot('Tài khoản A'));
+}
+
 Future<void> _preview(WidgetTester tester, String name) async {
   if (!const bool.fromEnvironment('UI_PREVIEWS')) return;
   final boundary = tester.renderObject<RenderRepaintBoundary>(
@@ -104,64 +118,66 @@ void main() {
     final originalShadows = debugDisableShadows;
     debugDisableShadows = false;
     try {
-    await tester.binding.setSurfaceSize(const Size(1440, 1000));
-    final accounts = StreamController<String?>();
-    addTearDown(accounts.close);
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(RepaintBoundary(
-        key: const ValueKey('preview'),
-        child: MaterialApp(
-            debugShowCheckedModeBanner: false,
-            theme: const bool.fromEnvironment('UI_PREVIEWS')
-                ? studyTheme(Brightness.light).copyWith(
-                    textTheme: studyTheme(Brightness.light)
-                        .textTheme
-                        .apply(fontFamily: 'PreviewSans'))
-                : studyTheme(Brightness.light),
-            builder: (_, child) => AssistantOverlay(
-                initialUserId: 'a',
-                accountChanges: accounts.stream,
-                sendMessage: (_) async =>
-                    'Mình sẽ giúp bạn chia nhỏ nội dung ôn tập. Bạn thi môn nào và ngày nào?',
-                child: child!),
-            home: HomeScreen(service: _PreviewService()))));
-    await tester.pumpAndSettle();
-    expect(find.text('Xin chào, Nguyễn Minh Anh'), findsOneWidget);
-    expect(find.text('Thống kê'), findsOneWidget);
-    expect(
-        find.descendant(
-            of: find.byType(NavigationBar), matching: find.text('Thống kê')),
-        findsNothing);
-    await _preview(tester, 'home-desktop');
-    await tester.tap(find.text('Chat AI'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('assistant-dialog')), findsOneWidget);
-    await tester.tap(find.text('Đồng ý và bắt đầu'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-        find.byType(TextField), 'Giúp tôi ôn thi có kế hoạch.');
-    await tester.tap(find.byTooltip('Gửi'));
-    await tester.pumpAndSettle();
-    await _preview(tester, 'chat-desktop');
-    await tester.tap(find.byTooltip('Thu gọn'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('assistant-dialog')), findsNothing);
-    await tester.tap(find.byTooltip('Mở trợ lý AI'));
-    await tester.pumpAndSettle();
-    expect(find.text('Giúp tôi ôn thi có kế hoạch.'), findsOneWidget);
-    await tester.tap(find.byTooltip('Thu gọn'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Chat AI'));
-    await tester.pumpAndSettle();
-    expect(find.text('Giúp tôi ôn thi có kế hoạch.'), findsOneWidget);
-    await tester.tap(find.byTooltip('Thu gọn'));
-    await tester.pumpAndSettle();
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    await tester.pumpAndSettle();
-    await _preview(tester, 'home-mobile');
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-    } finally { debugDisableShadows = originalShadows; }
+      await tester.binding.setSurfaceSize(const Size(1440, 1000));
+      final accounts = StreamController<String?>();
+      addTearDown(accounts.close);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(RepaintBoundary(
+          key: const ValueKey('preview'),
+          child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: const bool.fromEnvironment('UI_PREVIEWS')
+                  ? studyTheme(Brightness.light).copyWith(
+                      textTheme: studyTheme(Brightness.light)
+                          .textTheme
+                          .apply(fontFamily: 'PreviewSans'))
+                  : studyTheme(Brightness.light),
+              builder: (_, child) => AssistantOverlay(
+                  initialUserId: 'a',
+                  accountChanges: accounts.stream,
+                  sendMessage: (_) async =>
+                      'Mình sẽ giúp bạn chia nhỏ nội dung ôn tập. Bạn thi môn nào và ngày nào?',
+                  child: child!),
+              home: HomeScreen(service: _PreviewService()))));
+      await tester.pumpAndSettle();
+      expect(find.text('Xin chào, Nguyễn Minh Anh'), findsOneWidget);
+      expect(find.text('Thống kê'), findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.byType(NavigationBar), matching: find.text('Thống kê')),
+          findsNothing);
+      await _preview(tester, 'home-desktop');
+      await tester.tap(find.text('Chat AI'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('assistant-dialog')), findsOneWidget);
+      await tester.tap(find.text('Đồng ý và bắt đầu'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byType(TextField), 'Giúp tôi ôn thi có kế hoạch.');
+      await tester.tap(find.byTooltip('Gửi'));
+      await tester.pumpAndSettle();
+      await _preview(tester, 'chat-desktop');
+      await tester.tap(find.byTooltip('Thu gọn'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('assistant-dialog')), findsNothing);
+      await tester.tap(find.byTooltip('Mở trợ lý AI'));
+      await tester.pumpAndSettle();
+      expect(find.text('Giúp tôi ôn thi có kế hoạch.'), findsOneWidget);
+      await tester.tap(find.byTooltip('Thu gọn'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Chat AI'));
+      await tester.pumpAndSettle();
+      expect(find.text('Giúp tôi ôn thi có kế hoạch.'), findsOneWidget);
+      await tester.tap(find.byTooltip('Thu gọn'));
+      await tester.pumpAndSettle();
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      await tester.pumpAndSettle();
+      await _preview(tester, 'home-mobile');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    } finally {
+      debugDisableShadows = originalShadows;
+    }
   });
 
   testWidgets('load failure never claims the user has no lessons',
@@ -192,6 +208,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Xin chào, Tên mới'), findsOneWidget);
     expect(find.text('Xin chào, Tên cũ'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('switching accounts clears old data even after a local refresh',
+      (tester) async {
+    final service = _SwitchingService();
+    addTearDown(service.changes.close);
+    await tester.pumpWidget(MaterialApp(home: HomeScreen(service: service)));
+    await tester.pumpAndSettle();
+    studyDataChanged();
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    service.switching = true;
+    service.changes.add('b');
+    // Deliver the async auth event, then render its cleared snapshot. Do not
+    // pumpAndSettle while the new account deliberately has an in-flight load.
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Xin chào, Tài khoản A'), findsNothing);
+    service.nextAccount.complete(_RacingService.snapshot('Tài khoản B'));
+    await tester.pumpAndSettle();
+    expect(find.text('Xin chào, Tài khoản B'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

@@ -44,9 +44,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
       }
       if (!mounted) return;
       setState(() => _deleteAt = DateTime.parse(data['delete_at']).toLocal());
-      if (!kIsWeb &&
-          (defaultTargetPlatform == TargetPlatform.android ||
-              defaultTargetPlatform == TargetPlatform.iOS)) {
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
         try {
           await FlutterLocalNotificationsPlugin().cancelAll();
         } catch (_) {/* No platform permission. */}

@@ -39,6 +39,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
   List<Map<String, dynamic>> _filteredExams = [];
   List<Map<String, dynamic>> _subjects = [];
   bool _isLoading = true;
+  int _loadVersion = 0;
 
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
@@ -114,35 +115,50 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
 
   // Tải dữ liệu song song từ cả 2 bảng schedules và schedule_exams
   Future<void> _fetchData() async {
-    try {
-      setState(() => _isLoading = true);
-      final userId = supabase.auth.currentUser?.id;
-      if (userId == null) return;
-
-      final subjectRes =
-          await supabase.from('subjects').select().eq('user_id', userId);
-
-      final scheduleRes = await loadOwnedStudyRows(
-          supabase, 'schedules', userId,
-          subjects: Future.value(List<Map<String, dynamic>>.from(subjectRes)));
-
-      final examRes = await loadOwnedStudyRows(
-          supabase, 'schedule_exams', userId,
-          subjects: Future.value(List<Map<String, dynamic>>.from(subjectRes)));
-
+    if (!mounted) return;
+    final version = ++_loadVersion;
+    setState(() => _isLoading = true);
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) {
       setState(() {
-        _subjects = List<Map<String, dynamic>>.from(subjectRes);
-        _schedules = List<Map<String, dynamic>>.from(scheduleRes);
-        _exams = List<Map<String, dynamic>>.from(examRes);
-        _onSearchChanged();
+        _subjects = [];
+        _schedules = [];
+        _exams = [];
+        _filteredSchedules = [];
+        _filteredExams = [];
         _isLoading = false;
       });
+      return;
+    }
+    try {
+      final subjectsFuture = supabase
+          .from('subjects')
+          .select()
+          .eq('user_id', userId)
+          .then((rows) => List<Map<String, dynamic>>.from(rows));
+      final rows = await Future.wait([
+        subjectsFuture,
+        loadOwnedStudyRows(supabase, 'schedules', userId,
+            subjects: subjectsFuture),
+        loadOwnedStudyRows(supabase, 'schedule_exams', userId,
+            subjects: subjectsFuture),
+      ]);
+      if (!mounted ||
+          version != _loadVersion ||
+          supabase.auth.currentUser?.id != userId) {
+        return;
+      }
+      setState(() {
+        _subjects = rows[0];
+        _schedules = rows[1];
+        _exams = rows[2];
+        _isLoading = false;
+      });
+      _onSearchChanged();
     } catch (e) {
+      if (!mounted || version != _loadVersion) return;
       setState(() => _isLoading = false);
-      AppNotice.show(
-        context,
-        SnackBar(content: Text('Lỗi tải dữ liệu: $e')),
-      );
+      AppNotice.show(context, SnackBar(content: Text('Lỗi tải dữ liệu: $e')));
     }
   }
 
@@ -843,6 +859,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
                         }
                       }
 
+                      if (!context.mounted) return;
                       Navigator.pop(context);
                       studyDataChanged();
                       _fetchData();
@@ -854,6 +871,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
                                 : 'Đã thêm lịch học thành công!')),
                       );
                     } catch (e) {
+                      if (!context.mounted) return;
                       AppNotice.show(
                           context, SnackBar(content: Text('Lỗi: $e')));
                     }
@@ -1042,7 +1060,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
                         'end_time': formattedEndTime,
                       });
 
-                      if (mounted) {
+                      if (context.mounted) {
                         Navigator.pop(context);
                         studyDataChanged();
                         _fetchData();
@@ -1055,6 +1073,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
                         );
                       }
                     } catch (e) {
+                      if (!context.mounted) return;
                       AppNotice.show(
                           context, SnackBar(content: Text('Lỗi: $e')));
                     }
@@ -1089,7 +1108,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
       ),
     );
 
-    if (confirm == true) {
+    if (confirm == true && mounted) {
       try {
         await supabase.from('schedules').delete().eq('id', scheduleId);
         await supabase
@@ -1098,10 +1117,12 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
             .eq('schedule_id', scheduleId)
             .eq('schedule_type', 'schedule');
         studyDataChanged();
+        if (!mounted) return;
         _fetchData();
         AppNotice.show(
             context, const SnackBar(content: Text('Đã xóa lịch học!')));
       } catch (e) {
+        if (!mounted) return;
         AppNotice.show(context, SnackBar(content: Text('Lỗi xóa: $e')));
       }
     }
@@ -1128,7 +1149,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
       ),
     );
 
-    if (confirm == true) {
+    if (confirm == true && mounted) {
       try {
         await supabase.from('schedule_exams').delete().eq('id', examId);
         await supabase
@@ -1137,10 +1158,12 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
             .eq('schedule_id', examId)
             .eq('schedule_type', 'exam');
         studyDataChanged();
+        if (!mounted) return;
         _fetchData();
         AppNotice.show(
             context, const SnackBar(content: Text('Đã xóa lịch kiểm tra!')));
       } catch (e) {
+        if (!mounted) return;
         AppNotice.show(context, SnackBar(content: Text('Lỗi xóa: $e')));
       }
     }

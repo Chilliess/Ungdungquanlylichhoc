@@ -22,13 +22,20 @@ class HomeService {
   SupabaseClient get _client => _injectedClient ?? Supabase.instance.client;
 
   String? get accountId {
-    try { return _client.auth.currentUser?.id; } catch (_) { return null; }
+    try {
+      return _client.auth.currentUser?.id;
+    } catch (_) {
+      return null;
+    }
   }
 
   Stream<String?> get accountChanges {
     try {
-      return _client.auth.onAuthStateChange.map((event) => event.session?.user.id);
-    } catch (_) { return const Stream.empty(); }
+      return _client.auth.onAuthStateChange
+          .map((event) => event.session?.user.id);
+    } catch (_) {
+      return const Stream.empty();
+    }
   }
 
   String? get accountName {
@@ -87,8 +94,9 @@ class HomeService {
           subjects: subjectsFuture),
       remindersFuture,
     ]);
-    if (_client.auth.currentUser?.id != userId)
+    if (_client.auth.currentUser?.id != userId) {
       throw StateError('Tài khoản đã thay đổi.');
+    }
     final profile = results[0] as Map<String, dynamic>?;
     final subjects = List<Map<String, dynamic>>.from(results[1] as List);
     final schedules = List<Map<String, dynamic>>.from(results[2] as List);
@@ -228,9 +236,9 @@ class HomeService {
           start != null && start.isAfter(tomorrow) ? start : tomorrow;
       final end =
           ScheduleRecurrence.date(row['end_date']) ?? DateTime(2100, 12, 31);
-      final dates = ScheduleRecurrence.between(row, earliest, end);
-      if (dates.isEmpty) continue;
-      final date = dates.first;
+      final date =
+          ScheduleRecurrence.nextOccurrence(row, earliest, through: end);
+      if (date == null) continue;
       nextLessons.add(TodayLesson(
           id: lesson.id,
           subjectName: lesson.subjectName,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:untitled/widgets/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -7,6 +9,7 @@ import '../homescreen.dart';
 import 'loginscreen.dart';
 import 'widgets/brand_icon.dart';
 import 'widgets/social_auth_button.dart';
+import '../services/social_auth.dart';
 
 class Signinscreen extends StatefulWidget {
   const Signinscreen({super.key});
@@ -27,11 +30,28 @@ class _SigninscreenState extends State<Signinscreen> {
   bool _loading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  StreamSubscription<AuthState>? _authSubscription;
 
   static const Color _primary = Color(0xFF4A90E2);
 
   @override
+  void initState() {
+    super.initState();
+    _authSubscription = listenForSocialAuth(_openHome);
+  }
+
+  void _openHome() {
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const HomeScreen()),
+      (route) => false,
+    );
+  }
+
+  @override
   void dispose() {
+    unawaited(_authSubscription?.cancel());
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -102,8 +122,33 @@ class _SigninscreenState extends State<Signinscreen> {
     );
   }
 
-  void _handleOAuth(AuthProvider provider) {
-    _showSnackBar('Đăng ký bằng ${provider.label} chưa được cấu hình OAuth.');
+  Future<void> _handleOAuth(AuthProvider provider) async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    try {
+      final launched = await signInWithSocialProvider(provider);
+      if (!launched && mounted) {
+        _showSnackBar('Không mở được cửa sổ đăng ký ${provider.label}.');
+      }
+    } on AuthException {
+      if (mounted) {
+        _showSnackBar(
+            'Không thể đăng ký bằng ${provider.label}. Hãy kiểm tra cấu hình OAuth.');
+      }
+    } on UnsupportedError {
+      if (mounted) {
+        _showSnackBar(
+          'Đăng ký bằng ${provider.label} hiện chỉ hỗ trợ Android, Windows và web.',
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        _showSnackBar(
+            'Không thể bắt đầu đăng ký bằng ${provider.label}. Vui lòng thử lại.');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   /// Style chung cho các ô nhập liệu.
@@ -358,14 +403,17 @@ class _SigninscreenState extends State<Signinscreen> {
                           SocialAuthButton(
                             provider: AuthProvider.google,
                             label: AuthProvider.google.label,
-                            onPressed: () => _handleOAuth(AuthProvider.google),
+                            onPressed: _loading
+                                ? null
+                                : () => _handleOAuth(AuthProvider.google),
                           ),
                           const SizedBox(width: 12),
                           SocialAuthButton(
                             provider: AuthProvider.microsoft,
                             label: AuthProvider.microsoft.label,
-                            onPressed: () =>
-                                _handleOAuth(AuthProvider.microsoft),
+                            onPressed: _loading
+                                ? null
+                                : () => _handleOAuth(AuthProvider.microsoft),
                           ),
                         ],
                       ),

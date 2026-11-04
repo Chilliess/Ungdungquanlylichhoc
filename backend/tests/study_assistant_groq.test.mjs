@@ -51,6 +51,8 @@ test('Groq receives conversation roles and returns only visible text', async () 
   assert.equal(r.calls[0].url, 'https://api.groq.com/openai/v1/chat/completions');
   assert.equal(r.calls[0].headers.Authorization, 'Bearer test-key');
   assert.deepEqual(r.calls[0].body.messages.map((m) => m.role), ['system', 'user', 'assistant', 'user']);
+  assert.match(r.calls[0].body.messages[0].content, /Ngày hiện tại tại Việt Nam:/);
+  assert.match(r.calls[0].body.messages[0].content, /nếu thiếu chi tiết đã nói trước đó thì hỏi lại/);
   assert.deepEqual(r.rpcCalls, ['account_is_active', 'consume_assistant_request']);
 });
 

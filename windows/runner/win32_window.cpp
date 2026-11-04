@@ -1,6 +1,7 @@
 #include "win32_window.h"
 
 #include <dwmapi.h>
+#include <app_links/app_links_plugin_c_api.h>
 #include <flutter_windows.h>
 
 #include "resource.h"
@@ -123,6 +124,10 @@ Win32Window::~Win32Window() {
 bool Win32Window::Create(const std::wstring& title,
                          const Point& origin,
                          const Size& size) {
+  if (SendAppLinkToInstance(title)) {
+    return false;
+  }
+
   Destroy();
 
   const wchar_t* window_class =
@@ -147,6 +152,28 @@ bool Win32Window::Create(const std::wstring& title,
   UpdateTheme(window);
 
   return OnCreate();
+}
+
+bool Win32Window::SendAppLinkToInstance(const std::wstring& title) {
+  HWND existing_window = ::FindWindow(kWindowClassName, title.c_str());
+  if (!existing_window) {
+    return false;
+  }
+
+  SendAppLink(existing_window);
+
+  WINDOWPLACEMENT placement{};
+  placement.length = static_cast<UINT>(sizeof(WINDOWPLACEMENT));
+  if (GetWindowPlacement(existing_window, &placement)) {
+    const int show_command = placement.showCmd == SW_SHOWMINIMIZED
+        ? SW_RESTORE
+        : placement.showCmd;
+    ShowWindow(existing_window, show_command);
+  }
+  SetWindowPos(existing_window, HWND_TOP, 0, 0, 0, 0,
+               SWP_SHOWWINDOW | SWP_NOSIZE | SWP_NOMOVE);
+  SetForegroundWindow(existing_window);
+  return true;
 }
 
 bool Win32Window::Show() {

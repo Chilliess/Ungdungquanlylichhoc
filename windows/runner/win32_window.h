@@ -72,6 +72,8 @@ class Win32Window {
   virtual void OnDestroy();
 
  private:
+  bool SendAppLinkToInstance(const std::wstring& title);
+
   friend class WindowClassRegistrar;
 
   // OS callback called by message pump. Handles the WM_NCCREATE message which

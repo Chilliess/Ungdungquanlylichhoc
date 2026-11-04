@@ -34,7 +34,8 @@ class _SplashscreenState extends State<Splashscreen> {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (context) => hasSession ? const HomeScreen() : const Loginscreen(),
+        builder: (context) =>
+            hasSession ? const HomeScreen() : const Loginscreen(),
       ),
     );
   }
@@ -48,8 +49,8 @@ class _SplashscreenState extends State<Splashscreen> {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      body: const Center(
-        child: const FlutterLogo(
+      body: Center(
+        child: FlutterLogo(
           size: 100,
         ),
       ),

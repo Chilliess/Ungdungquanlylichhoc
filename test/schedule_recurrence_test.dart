@@ -3,6 +3,69 @@ import 'package:untitled/models/schedule_recurrence.dart';
 import 'package:untitled/services/home_service.dart';
 
 void main() {
+  test('next occurrence matches the existing day-by-day rules', () {
+    final starts = ['2024-02-29', '2026-01-31', '2026-11-02'];
+    final fromDates = [
+      DateTime(2025, 2, 1),
+      DateTime(2026, 11, 4),
+      DateTime(2028, 3, 1)
+    ];
+    final through = DateTime(2029, 12, 31);
+    for (final frequency in ScheduleRecurrence.labels.keys) {
+      for (final start in starts) {
+        for (final from in fromDates) {
+          final data = <String, dynamic>{
+            'recurrence': frequency,
+            'start_date': start,
+            'day_of_week': [2, 4, 8]
+          };
+          final iterator =
+              ScheduleRecurrence.between(data, from, through).iterator;
+          final expected = iterator.moveNext() ? iterator.current : null;
+          expect(
+              ScheduleRecurrence.nextOccurrence(data, from, through: through),
+              expected,
+              reason: '$frequency / $start / $from');
+        }
+      }
+    }
+  });
+  test(
+      'next occurrence preserves bounds, legacy weekdays and leap-century rules',
+      () {
+    expect(
+        ScheduleRecurrence.nextOccurrence({
+          'recurrence': 'yearly',
+          'start_date': '2096-02-29',
+        }, DateTime(2097), through: DateTime(2105)),
+        DateTime(2104, 2, 29));
+    expect(
+        ScheduleRecurrence.nextOccurrence({
+          'recurrence': 'monthly',
+          'start_date': '2026-01-31',
+          'end_date': '2026-02-28',
+        }, DateTime(2026, 2), through: DateTime(2027)),
+        isNull);
+    expect(
+        ScheduleRecurrence.nextOccurrence({
+          'recurrence': null,
+          'day_of_week': [2, 4],
+        }, DateTime(2026, 11, 3), through: DateTime(2026, 11, 8)),
+        DateTime(2026, 11, 4));
+    expect(
+        ScheduleRecurrence.nextOccurrence({
+          'recurrence': 'weekly',
+          'day_of_week': [],
+        }, DateTime(2026), through: DateTime(2100, 12, 31)),
+        isNull);
+    expect(
+        ScheduleRecurrence.nextOccurrence({
+          'recurrence': 'daily',
+          'start_date': '2026-11-05',
+          'end_date': '2026-11-06',
+        }, DateTime(2026, 11, 4), through: DateTime(2026, 11, 5)),
+        DateTime(2026, 11, 5));
+  });
   Map<String, dynamic> row(String frequency, String start, [String? end]) => {
         'id': 'schedule',
         'subject_id': 'subject',

@@ -21,10 +21,11 @@
 ### Tài khoản
 
 - Đăng ký và đăng nhập bằng email/mật khẩu qua Supabase Auth.
+- Đăng nhập và đăng ký bằng Google hoặc Microsoft qua Supabase OAuth sau khi cấu hình provider.
 - Cập nhật tên hiển thị và đổi mật khẩu trong màn hình tài khoản.
 - Gửi email khôi phục mật khẩu qua Supabase Auth.
 - Nếu project bật xác nhận email, người dùng cần xác minh email trước khi đăng nhập.
-- Các nút đăng nhập Google, Microsoft và Apple hiện mới là giao diện; OAuth chưa được cấu hình.
+- Google và Microsoft dùng OAuth của Supabase; xem hướng dẫn cấu hình bên dưới.
 
 ### Trang chủ
 
@@ -176,6 +177,13 @@ Không chạy lại các định nghĩa cũ sau các bản cập nhật ở cu�
 
 Ứng dụng Flutter là client công khai: **không** đặt `service_role` key, database password hoặc secret key trong mã ứng dụng. Kiểm tra RLS trước khi dùng dữ liệu thật; trong SQL tổng hiện tại, các bảng lịch, môn, nhắc và nhãn giới hạn truy cập theo chủ sở hữu, và `profiles` chỉ cho phép người dùng đọc hồ sơ của chính mình. Nếu bật xác nhận email hoặc khôi phục mật khẩu, cấu hình email và URL chuyển hướng tương ứng trong Supabase Auth.
 
+### Đăng nhập Google và Microsoft
+
+1. Trong Supabase Dashboard, bật Google và Azure (Microsoft) ở **Authentication → Providers** và nhập thông tin OAuth của từng nhà cung cấp.
+2. Thêm URL callback hiển thị trong Supabase vào danh sách redirect URI của Google/Azure.
+3. Thêm `com.example.untitled://login-callback/` vào **Authentication → URL Configuration → Redirect URLs**. Khi đổi Android `applicationId`, cập nhật đồng thời scheme trong `AndroidManifest.xml` và URL này.
+4. Với bản Windows, ứng dụng tự đăng ký callback `com.example.untitled://login-callback/` cho tài khoản Windows hiện tại. Với bản web, thêm domain triển khai vào danh sách redirect URLs. Callback hiện hỗ trợ Android, Windows và web. Không đưa client secret của Google/Azure vào ứng dụng.
+
 ## Nhập lịch từ CSV
 
 Tính năng nhập nằm trong phần cài đặt. Tệp cần có dòng tiêu đề ở dòng đầu tiên; ứng dụng đọc các cột theo vị trí từ A đến J:
@@ -208,14 +216,19 @@ Chạy toàn bộ kiểm thử Flutter:
 
 ```bash
 flutter test
+node --test backend/tests/study_assistant_groq.test.mjs
 ```
 
 Các kiểm thử hiện có bao phủ quy tắc lịch lặp, thống kê, service trang chủ, tài khoản, biên tập lịch, nhãn phân loại và tương tác giao diện.
 
+Kiểm tra phân tích mã Dart:
+```bash
+flutter analyze
+```
 ## Lưu ý
 
 - Thông báo cục bộ và quyền thông báo phụ thuộc nền tảng, quyền của hệ điều hành và cấu hình thiết bị.
-- Các nút OAuth trên màn hình hiện chưa kết nối nhà cung cấp đăng nhập.
+- Google/Microsoft OAuth cần được bật và cấu hình trong Supabase trước khi sử dụng.
 - Khi thêm hoặc nâng cấp chức năng Supabase, cần cập nhật schema tương ứng bằng SQL tổng cho database mới hoặc migration cho database hiện có.
 
 ## Tác giả

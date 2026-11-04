@@ -52,11 +52,10 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
   bool? _permissionGranted;
   String? _notificationNotice;
   late final _categoryStore = SupabaseLessonCategoryStore(_supabase);
-  bool get _mobile =>
-      !const bool.fromEnvironment('dart.library.js_interop') &&
-      (defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.iOS);
+  bool get _android =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
   bool _loading = true;
+  int _loadVersion = 0;
   bool _saving = false;
   bool _notificationsInitialized = false;
   String? _error;
@@ -160,24 +159,14 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
 
   Future<void> _initializeNotifications() async {
     if (_notificationsInitialized) return;
-    if (!_mobile) {
-      _notificationNotice =
-          'Thông báo trên thiết bị hiện hỗ trợ Android và iOS.';
+    if (!_android) {
+      _notificationNotice = 'Thông báo cục bộ hiện chỉ hỗ trợ Android.';
       return;
     }
 
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
-    const darwinSettings = DarwinInitializationSettings(
-      requestAlertPermission: false,
-      requestBadgePermission: false,
-      requestSoundPermission: false,
-    );
-
-    const settings = InitializationSettings(
-      android: androidSettings,
-      iOS: darwinSettings,
-    );
+    const settings = InitializationSettings(android: androidSettings);
 
     await _notifications.initialize(settings);
 
@@ -193,10 +182,7 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
   Future<void> _requestPermission() async {
     final android = _notifications.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
-    final ios = _notifications.resolvePlatformSpecificImplementation<
-        IOSFlutterLocalNotificationsPlugin>();
-    _permissionGranted = await android?.requestNotificationsPermission() ??
-        await ios?.requestPermissions(alert: true, badge: true, sound: true);
+    _permissionGranted = await android?.requestNotificationsPermission();
     if (mounted) setState(() {});
     if (_notificationsInitialized && _permissionGranted == true) {
       await _rescheduleAllEnabledReminders();
@@ -204,9 +190,11 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
+    final version = ++_loadVersion;
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) {
-      if (mounted) {
+      if (mounted && version == _loadVersion) {
         setState(() {
           _loading = false;
           _error = 'Bạn cần đăng nhập để thiết lập nhắc nhở.';
@@ -215,7 +203,7 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
       return;
     }
 
-    if (mounted) {
+    if (mounted && version == _loadVersion) {
       setState(() {
         _loading = true;
         _error = null;
@@ -223,17 +211,26 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
     }
 
     try {
-      // Tải lịch học từ bảng schedules
-      final scheduleResponse =
-          await loadOwnedStudyRows(_supabase, 'schedules', userId);
-
-      // Tải lịch kiểm tra từ bảng schedule_exams
-      final examResponse =
-          await loadOwnedStudyRows(_supabase, 'schedule_exams', userId);
-
-      // Tải tất cả nhắc nhở từ bảng reminders chung
-      final reminderResponse =
-          await _supabase.from('reminders').select().eq('user_id', userId);
+      final subjectsFuture = _supabase
+          .from('subjects')
+          .select()
+          .eq('user_id', userId)
+          .then((rows) => List<Map<String, dynamic>>.from(rows));
+      final results = await Future.wait([
+        loadOwnedStudyRows(_supabase, 'schedules', userId,
+            subjects: subjectsFuture),
+        loadOwnedStudyRows(_supabase, 'schedule_exams', userId,
+            subjects: subjectsFuture),
+        _supabase.from('reminders').select().eq('user_id', userId),
+      ]);
+      if (!mounted ||
+          version != _loadVersion ||
+          _supabase.auth.currentUser?.id != userId) {
+        return;
+      }
+      final scheduleResponse = results[0];
+      final examResponse = results[1];
+      final reminderResponse = results[2];
 
       final schedules =
           List<Map<String, dynamic>>.from(scheduleResponse as List);
@@ -257,7 +254,7 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
         }
       }
 
-      if (mounted) {
+      if (mounted && version == _loadVersion) {
         setState(() {
           _schedules = schedules;
           _exams = exams;
@@ -269,7 +266,7 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && version == _loadVersion) {
         setState(() {
           _loading = false;
           _error = 'Lỗi tải dữ liệu từ Supabase: $e';
@@ -529,11 +526,6 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
                 ]
               : null,
         ),
-        iOS: const DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-        ),
       );
 
   String _formatDays(dynamic rawDays) {
@@ -671,7 +663,7 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
                 title: const Text('Chế độ báo thức'),
                 subtitle: Text(_supportsAlarm
                     ? 'Phát âm báo lặp lại cho các lịch đã bật nhắc nhở'
-                    : 'Báo thức hiện hỗ trợ bản Android. iOS dùng thông báo có âm thanh; web không bảo đảm reo khi đóng ứng dụng.'),
+                    : 'Báo thức hiện chỉ hỗ trợ Android; web không bảo đảm reo khi đóng ứng dụng.'),
                 value: _alarmMode,
                 onChanged: !_supportsAlarm || _saving
                     ? null
@@ -777,7 +769,7 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(_notificationNotice ??
                   'Thông báo chưa được bật. Cho phép thông báo trong cài đặt thiết bị.'),
-              if (_mobile)
+              if (_android)
                 TextButton(
                     onPressed: _requestPermission,
                     child: const Text('Cho phép thông báo')),

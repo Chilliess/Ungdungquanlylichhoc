@@ -58,7 +58,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _dataChanged() {
     _refreshDebounce?.cancel();
-    _accounts?.cancel();
     _refreshDebounce = Timer(const Duration(milliseconds: 120), () {
       if (mounted) _load(showLoader: false);
     });
@@ -78,6 +77,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     _refreshDebounce?.cancel();
+    _accounts?.cancel();
     studyDataRevision.removeListener(_dataChanged);
     learningStore.removeListener(_learningChanged);
     WidgetsBinding.instance.removeObserver(this);
@@ -95,10 +95,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _snapshot = data;
           _hasSnapshot = true;
           final now = DateTime.now();
-          if (!_upcomingDatePicked)
+          if (!_upcomingDatePicked) {
             _selectedUpcomingDate = data.upcomingLessons.isEmpty
                 ? DateTime(now.year, now.month, now.day)
                 : data.upcomingLessons.first.date;
+          }
           _loading = false;
           _failed = false;
         });
@@ -279,11 +280,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         initialDate: initial,
         firstDate: DateTime(2020),
         lastDate: DateTime(2100, 12, 31));
-    if (date != null && mounted)
+    if (date != null && mounted) {
       setState(() {
         _selectedUpcomingDate = date;
         _upcomingDatePicked = true;
       });
+    }
   }
 
   Widget _upcomingHeader() {
