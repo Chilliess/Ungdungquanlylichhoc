@@ -14,15 +14,15 @@ class _SplashscreenState extends State<Splashscreen> {
   final supabase = Supabase.instance.client;
 
   nextScreen() async {
-    await Future.delayed(Duration(seconds: 3));
+    await Future.delayed(const Duration(seconds: 3));
 
     if (supabase.auth.currentSession == null){
       Navigator.pushReplacement(context,
-          MaterialPageRoute(builder: (context) => Loginscreen())
+          MaterialPageRoute(builder: (context) => const Loginscreen())
       );
     } else {
       Navigator.pushReplacement(context,
-          MaterialPageRoute(builder: (context) => HomeScreen())
+          MaterialPageRoute(builder: (context) => const HomeScreen())
       );
     }
   }
@@ -35,9 +35,9 @@ class _SplashscreenState extends State<Splashscreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: FlutterLogo(
+    return const Scaffold(
+      body: const Center(
+        child: const FlutterLogo(
           size: 100,
         ),
       ),

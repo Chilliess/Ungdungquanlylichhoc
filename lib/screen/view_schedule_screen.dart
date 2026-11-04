@@ -1,3 +1,4 @@
+import '../services/study_data.dart';
 import 'package:untitled/widgets/app_notice.dart';
 import '../models/schedule_recurrence.dart';
 import 'package:flutter/gestures.dart';
@@ -9,6 +10,9 @@ import 'lesson_editor.dart';
 import 'lesson_categories.dart';
 import 'lesson_event_tile.dart';
 import 'lesson_search.dart';
+import '../services/learning_store.dart';
+import 'tasks_screen.dart';
+import 'timetable_import.dart';
 
 enum _ScheduleView { day, month, year }
 
@@ -32,8 +36,9 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
   void _ensureVisibleEvents() {
     final year =
         (_view == _ScheduleView.day ? _selectedDate : _browseDate).year;
-    if (_renderedYear != null && _renderedYear != year && mounted)
+    if (_renderedYear != null && _renderedYear != year && mounted) {
       _populateEvents(year);
+    }
   }
 
   bool _isLoading = true;
@@ -90,6 +95,7 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
   }
 
   Future<void> _loadDataFromSupabase() async {
+    await learningStore.load();
     final version = ++_loadVersion;
     setState(() => _isLoading = true);
 
@@ -105,15 +111,19 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
       } catch (_) {
         // Calendars remain readable while the optional category update is pending.
       }
-      final scheduleRes = await supabase
-          .from('schedules')
-          .select('*, subjects(subject_code, subject_name, color_code)')
-          .eq('user_id', userId);
-
-      final examRes = await supabase
-          .from('schedule_exams')
-          .select('*, subjects(subject_code, subject_name, color_code)')
-          .eq('user_id', userId);
+      final subjectsFuture = supabase
+          .from('subjects')
+          .select()
+          .eq('user_id', userId)
+          .then((rows) => List<Map<String, dynamic>>.from(rows));
+      final eventRows = await Future.wait([
+        loadOwnedStudyRows(supabase, 'schedules', userId,
+            subjects: subjectsFuture),
+        loadOwnedStudyRows(supabase, 'schedule_exams', userId,
+            subjects: subjectsFuture),
+      ]);
+      final scheduleRes = eventRows[0];
+      final examRes = eventRows[1];
 
       if (!mounted || version != _loadVersion) return;
       _scheduleRows = scheduleRes;
@@ -140,6 +150,21 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
     final events = _buildEvents(year);
     _eventController.removeWhere((element) => true);
     _eventController.addAll(events);
+    _eventController.addAll(learningStore.blocks.map((b) {
+      final start = DateTime.parse(b['start']), end = DateTime.parse(b['end']);
+      return CalendarEventData<Map<String, dynamic>>(
+          title: 'Tự học: ${b['title']}',
+          date: start,
+          startTime: start,
+          endTime: end,
+          color: Colors.teal,
+          event: {
+            ...b,
+            'is_study': true,
+            'subjects': {'subject_name': b['title']},
+            'room': 'Tự học'
+          });
+    }).toList());
   }
 
   List<CalendarEventData<Map<String, dynamic>>> _buildEvents(int year) {
@@ -287,8 +312,37 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
     }
   }
 
+  Future<void> _chooseEventType() async {
+    final type = await showModalBottomSheet<String>(
+        context: context,
+        builder: (c) => SafeArea(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+              for (final entry in {
+                'lesson': 'Lịch học',
+                'exam': 'Lịch thi',
+                'study': 'Tự học / Công việc',
+                'import': 'Nhập ảnh / PDF'
+              }.entries)
+                ListTile(
+                    title: Text(entry.value),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.pop(c, entry.key)),
+            ])));
+    if (!mounted || type == null) return;
+    if (type == 'lesson' || type == 'exam') {
+      await _editLesson(null, type == 'exam');
+      return;
+    }
+    await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => type == 'import'
+            ? const TimetableImportScreen()
+            : const TasksScreen()));
+    if (mounted) await _loadDataFromSupabase();
+  }
+
   Future<void> _editLesson(
-      [CalendarEventData<Map<String, dynamic>>? event]) async {
+      [CalendarEventData<Map<String, dynamic>>? event,
+      bool newExam = false]) async {
     final item = event?.event;
     final initial = event == null
         ? null
@@ -328,9 +382,14 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
                 child: child));
       },
       pageBuilder: (context, animation, secondary) => LessonEditor(
+        dialogTitle: newExam
+            ? 'Thêm lịch thi'
+            : item?['is_exam'] == true
+                ? 'Chỉnh sửa lịch thi'
+                : null,
         initialDate: _selectedDate,
         initial: initial,
-        manageRecurrence: item?['is_exam'] != true,
+        manageRecurrence: !newExam && item?['is_exam'] != true,
         categoryStore: _categoryStore,
         onCategoriesChanged: _loadDataFromSupabase,
         recurring: item != null &&
@@ -341,7 +400,7 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
             throw Exception('Vui lòng đăng nhập để lưu lịch học.');
           }
           try {
-            if (item?['is_exam'] == true) {
+            if (newExam || item?['is_exam'] == true) {
               await supabase.rpc('save_calendar_lesson',
                   params: draft.toParameters(
                       id: item?['id']?.toString(),
@@ -374,6 +433,14 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
   }
 
   void _showEventDetail(CalendarEventData<Map<String, dynamic>> event) {
+    if (event.event?['is_study'] == true) {
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const TasksScreen()))
+          .then((_) {
+        if (mounted) _loadDataFromSupabase();
+      });
+      return;
+    }
     final item = event.event;
     final subject = item?['subjects'] ?? {};
     final bool isExam = item?['is_exam'] ?? false;
@@ -1002,7 +1069,7 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
             IconButton(
                 key: const ValueKey('schedule-add'),
                 tooltip: 'Thêm lịch học',
-                onPressed: _isLoading ? null : () => _editLesson(),
+                onPressed: _isLoading ? null : _chooseEventType,
                 icon: const Icon(Icons.add)),
             IconButton(
               tooltip: 'Tải lại lịch',

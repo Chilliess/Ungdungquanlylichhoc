@@ -1,3 +1,4 @@
+import '../services/study_data.dart';
 import 'package:untitled/widgets/app_notice.dart';
 import 'confirm_action.dart';
 import 'package:flutter/material.dart';
@@ -121,15 +122,13 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
       final subjectRes =
           await supabase.from('subjects').select().eq('user_id', userId);
 
-      final scheduleRes = await supabase
-          .from('schedules')
-          .select('*, subjects(subject_code, subject_name, color_code)')
-          .eq('user_id', userId);
+      final scheduleRes = await loadOwnedStudyRows(
+          supabase, 'schedules', userId,
+          subjects: Future.value(List<Map<String, dynamic>>.from(subjectRes)));
 
-      final examRes = await supabase
-          .from('schedule_exams')
-          .select('*, subjects(subject_code, subject_name, color_code)')
-          .eq('user_id', userId);
+      final examRes = await loadOwnedStudyRows(
+          supabase, 'schedule_exams', userId,
+          subjects: Future.value(List<Map<String, dynamic>>.from(subjectRes)));
 
       setState(() {
         _subjects = List<Map<String, dynamic>>.from(subjectRes);
@@ -191,8 +190,9 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
       bool hasCommonDay = newDays.any((day) => existingDays.contains(day));
       if (!hasCommonDay) continue;
 
-      if (existing['start_time'] == null || existing['end_time'] == null)
+      if (existing['start_time'] == null || existing['end_time'] == null) {
         continue;
+      }
 
       final startParts = existing['start_time'].toString().split(':');
       final endParts = existing['end_time'].toString().split(':');
@@ -431,7 +431,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
                           style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
                       DropdownButtonFormField<String>(
-                        value: selectedSubjectId,
+                        initialValue: selectedSubjectId,
                         isExpanded: true,
                         items: _subjects.map((sub) {
                           return DropdownMenuItem<String>(
@@ -527,7 +527,9 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
                                                     deleting: true,
                                                     message:
                                                         'Xóa khung giờ này?') ||
-                                                !context.mounted) return;
+                                                !context.mounted) {
+                                              return;
+                                            }
                                             setDialogState(() =>
                                                 sessionGroups.removeAt(index));
                                           },
@@ -694,6 +696,20 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
                     final userId = supabase.auth.currentUser?.id;
                     if (userId == null || selectedSubjectId == null) return;
 
+                    for (final group in sessionGroups) {
+                      if (group.endTime.hour * 60 + group.endTime.minute <=
+                              group.startTime.hour * 60 +
+                                  group.startTime.minute ||
+                          group.endDate.isBefore(group.startDate)) {
+                        AppNotice.show(
+                            context,
+                            const SnackBar(
+                                content: Text(
+                                    'Giờ kết thúc phải sau giờ bắt đầu và ngày kết thúc không được trước ngày bắt đầu.')));
+                        return;
+                      }
+                    }
+
                     for (int i = 0; i < sessionGroups.length; i++) {
                       for (int j = i + 1; j < sessionGroups.length; j++) {
                         var g1 = sessionGroups[i];
@@ -777,12 +793,21 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
                           'end_time': formattedEndTime,
                           'start_date': formattedStartDate,
                           'end_date': formattedEndDate,
+                          // Preserve explicit daily/monthly/yearly rules from the shared editor.
+                          'recurrence': ['daily', 'monthly', 'yearly']
+                                  .contains(schedule['recurrence'])
+                              ? schedule['recurrence']
+                              : (formattedStartDate == formattedEndDate
+                                  ? 'none'
+                                  : 'weekly'),
                           'periods_count': periods,
                         };
 
                         if (!await confirmAction(context,
                                 message: 'Lưu thay đổi cho lịch học này?') ||
-                            !context.mounted) return;
+                            !context.mounted) {
+                          return;
+                        }
                         await supabase
                             .from('schedules')
                             .update(dataMap)
@@ -808,6 +833,9 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
                             'end_time': formattedEndTime,
                             'start_date': formattedStartDate,
                             'end_date': formattedEndDate,
+                            'recurrence': formattedStartDate == formattedEndDate
+                                ? 'none'
+                                : 'weekly',
                             'periods_count': periods,
                           };
 
@@ -816,6 +844,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
                       }
 
                       Navigator.pop(context);
+                      studyDataChanged();
                       _fetchData();
                       AppNotice.show(
                         context,
@@ -876,7 +905,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
                           style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
                       DropdownButtonFormField<String>(
-                        value: selectedSubjectId,
+                        initialValue: selectedSubjectId,
                         isExpanded: true,
                         items: _subjects.map((sub) {
                           return DropdownMenuItem<String>(
@@ -970,6 +999,15 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
                     if (userId == null || selectedSubjectId == null) return;
 
                     // Kiểm tra trùng lịch trước khi lưu
+                    if (endTime.hour * 60 + endTime.minute <=
+                        startTime.hour * 60 + startTime.minute) {
+                      AppNotice.show(
+                          context,
+                          const SnackBar(
+                              content:
+                                  Text('Giờ kết thúc phải sau giờ bắt đầu.')));
+                      return;
+                    }
                     String? conflictError = _checkExamConflict(
                       examDate: selectedDate,
                       newStart: startTime,
@@ -1006,6 +1044,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
 
                       if (mounted) {
                         Navigator.pop(context);
+                        studyDataChanged();
                         _fetchData();
                         AppNotice.show(
                           context,
@@ -1058,6 +1097,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
             .delete()
             .eq('schedule_id', scheduleId)
             .eq('schedule_type', 'schedule');
+        studyDataChanged();
         _fetchData();
         AppNotice.show(
             context, const SnackBar(content: Text('Đã xóa lịch học!')));
@@ -1096,6 +1136,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
             .delete()
             .eq('schedule_id', examId)
             .eq('schedule_type', 'exam');
+        studyDataChanged();
         _fetchData();
         AppNotice.show(
             context, const SnackBar(content: Text('Đã xóa lịch kiểm tra!')));

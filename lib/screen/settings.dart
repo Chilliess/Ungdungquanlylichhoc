@@ -1,3 +1,4 @@
+import '../services/study_data.dart';
 import 'package:untitled/widgets/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -5,13 +6,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'dart:convert';
 import '../auth/loginscreen.dart';
-import '../main.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-Future<void> _saveThemePreference(bool isDark) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setBool('is_dark_mode', isDark);
-}
+import '../services/app_preferences.dart';
+import 'info_account.dart';
+import 'schedule_announcement.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -190,6 +187,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
 
         successCount++;
+        studyDataChanged();
       }
 
       if (mounted) {
@@ -233,18 +231,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
           ],
         ),
-        content: SingleChildScrollView(
+        content: const SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 '1. Cấu trúc cột file CSV nếu làm trong Excel (từ A đến J):',
                 style: TextStyle(
                     fontWeight: FontWeight.bold, color: Colors.blueAccent),
               ),
-              const SizedBox(height: 6),
-              const SelectableText(
+              SizedBox(height: 6),
+              SelectableText(
                 '• Cột A: Mã môn học (VD: INT101)\n'
                 '• Cột B: Tên môn học (VD: Lập trình C)\n'
                 '• Cột C: Mã màu Hex (VD: #3B82F6 hoặc để trống)\n'
@@ -257,14 +255,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 '• Cột J: Ngày kết thúc (VD: 2026-06-30 hoặc 30/06/2026)',
                 style: TextStyle(fontSize: 13, height: 1.4),
               ),
-              const SizedBox(height: 12),
-              const Text(
+              SizedBox(height: 12),
+              Text(
                 '2. Lưu ý quan trọng khi Lưu file trên Excel:',
                 style: TextStyle(
                     fontWeight: FontWeight.bold, color: Colors.orange),
               ),
-              const SizedBox(height: 6),
-              const Text(
+              SizedBox(height: 6),
+              Text(
                 '• Dòng 1 phải ghi tiêu đề tiếng Việt:\n'
                 '"Mã môn học,Tên môn học,Màu,Phòng học,Giảng viên,Ngày trong tuần,Giờ bắt đầu,Giờ kết thúc,Ngày bắt đầu,Ngày kết thúc"\n'
                 '• Khi Save trong Excel, hãy chọn định dạng:\n'
@@ -312,7 +310,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (mounted) {
           Navigator.pushAndRemoveUntil(
             context,
-            MaterialPageRoute(builder: (context) => Loginscreen()),
+            MaterialPageRoute(builder: (context) => const Loginscreen()),
             (value) => false,
           );
         }
@@ -383,19 +381,91 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: ListView(
                       padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
                       children: [
+                        _section('TÀI KHOẢN', [
+                          ListTile(
+                              leading: _icon(Icons.person_outline),
+                              title: const Text('Thông tin & bảo mật'),
+                              subtitle: const Text(
+                                  'Hồ sơ, mật khẩu và xóa tài khoản'),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                      builder: (_) => const AccountScreen()))),
+                        ]),
                         _section('GIAO DIỆN', [
+                          ListTile(
+                              leading: _icon(Icons.palette_outlined),
+                              title: const Text('Chủ đề'),
+                              trailing: DropdownButton<ThemeMode>(
+                                  value: appPreferences.theme,
+                                  underline: const SizedBox.shrink(),
+                                  items: const [
+                                    DropdownMenuItem(
+                                        value: ThemeMode.system,
+                                        child: Text('Hệ thống')),
+                                    DropdownMenuItem(
+                                        value: ThemeMode.light,
+                                        child: Text('Sáng')),
+                                    DropdownMenuItem(
+                                        value: ThemeMode.dark,
+                                        child: Text('Tối')),
+                                  ],
+                                  onChanged: (value) {
+                                    appPreferences.update(themeMode: value);
+                                    setState(() {});
+                                  })),
+                          const Divider(height: 1, indent: 66),
+                          ListTile(
+                              leading: _icon(Icons.text_fields),
+                              title: const Text('Cỡ chữ'),
+                              subtitle: Slider(
+                                  value: appPreferences.textScale,
+                                  min: 1,
+                                  max: 1.3,
+                                  divisions: 3,
+                                  label:
+                                      '${(appPreferences.textScale * 100).round()}%',
+                                  onChanged: (value) {
+                                    appPreferences.update(scale: value);
+                                    setState(() {});
+                                  })),
                           SwitchListTile(
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 16, vertical: 8),
-                              secondary: _icon(Icons.dark_mode_outlined),
-                              title: const Text('Chế độ tối'),
-                              value: themeNotifier.value == ThemeMode.dark,
-                              onChanged: (value) async {
-                                themeNotifier.value =
-                                    value ? ThemeMode.dark : ThemeMode.light;
+                              secondary: _icon(Icons.animation),
+                              title: const Text('Giảm chuyển động'),
+                              value: appPreferences.reduceMotion,
+                              onChanged: (value) {
+                                appPreferences.update(reduced: value);
                                 setState(() {});
-                                await _saveThemePreference(value);
                               }),
+                        ]),
+                        _section('NHẮC NHỞ', [
+                          ListTile(
+                              leading: _icon(Icons.notifications_none),
+                              title: const Text('Thiết lập nhắc lịch'),
+                              subtitle: const Text(
+                                  'Thời gian nhắc và quyền thông báo'),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          const ScheduleAnnouncementScreen()))),
+                        ]),
+                        _section('TRỢ LÝ AI', [
+                          SwitchListTile(
+                              secondary: _icon(Icons.auto_awesome),
+                              title: const Text('Hiện trợ lý mini'),
+                              subtitle: const Text('Mở nhanh ở góc màn hình'),
+                              value: appPreferences.showAssistant,
+                              onChanged: (value) {
+                                appPreferences.update(assistant: value);
+                                setState(() {});
+                              }),
+                          const Padding(
+                              padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              child: Text(
+                                  'Chỉ nội dung bạn gửi được chuyển tới dịch vụ AI. Lịch sử lưu riêng theo tài khoản trên thiết bị này. Bạn có thể xem lại và xóa trong cửa sổ trợ lý.')),
                         ]),
                         _section('DỮ LIỆU LỊCH HỌC', [
                           ListTile(

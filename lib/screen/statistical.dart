@@ -1,9 +1,12 @@
+import '../services/study_data.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/study_statistics.dart';
 import 'view_schedule_screen.dart';
+import '../services/learning_store.dart';
+import '../widgets/learning_summary.dart';
 
 class StatisticalScreen extends StatefulWidget {
   const StatisticalScreen({super.key, this.loadSchedules, this.initialDate});
@@ -43,13 +46,12 @@ class _StatisticalScreenState extends State<StatisticalScreen> {
       if (widget.loadSchedules != null) {
         rows = await widget.loadSchedules!();
       } else {
+        await learningStore.load();
         final client = Supabase.instance.client,
             user = Supabase.instance.client.auth.currentUser;
         if (user == null) throw Exception('Bạn cần đăng nhập để xem thống kê.');
-        rows = List<Map<String, dynamic>>.from(await client
-            .from('schedules')
-            .select('*, subjects(subject_name)')
-            .eq('user_id', user.id));
+        rows = List<Map<String, dynamic>>.from(
+            await loadOwnedStudyRows(client, 'schedules', user.id));
       }
       if (mounted) {
         setState(() {
@@ -325,6 +327,8 @@ class _StatisticalScreenState extends State<StatisticalScreen> {
                                           .titleMedium),
                                   const SizedBox(height: 18),
                                   _chart(stats),
+                                  if (widget.loadSchedules == null)
+                                    const LearningSummary(),
                                   Container(
                                       padding: const EdgeInsets.all(14),
                                       decoration: BoxDecoration(

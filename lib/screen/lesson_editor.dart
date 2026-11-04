@@ -1,3 +1,4 @@
+import '../services/study_data.dart';
 import 'confirm_action.dart';
 import '../models/schedule_recurrence.dart';
 import 'package:flutter/cupertino.dart';
@@ -66,12 +67,14 @@ class LessonEditor extends StatefulWidget {
       required this.initialDate,
       required this.onSave,
       this.initial,
+      this.dialogTitle,
       this.categoryStore,
       this.onCategoriesChanged,
       this.recurring = false,
       this.manageRecurrence = false});
   final DateTime initialDate;
   final LessonDraft? initial;
+  final String? dialogTitle;
   final bool recurring;
   final bool manageRecurrence;
   final LessonCategoryStore? categoryStore;
@@ -246,6 +249,7 @@ class _LessonEditorState extends State<LessonEditor> {
           category: _category,
           recurrence: _recurrence,
           repeatUntil: _recurrence == 'none' ? null : _repeatUntil));
+      studyDataChanged();
       if (mounted) {
         setState(() => _allowClose = true);
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -334,9 +338,10 @@ class _LessonEditorState extends State<LessonEditor> {
                             children: [
                               Expanded(
                                   child: Text(
-                                widget.initial == null
-                                    ? 'Thêm lịch học'
-                                    : 'Chỉnh sửa lịch',
+                                widget.dialogTitle ??
+                                    (widget.initial == null
+                                        ? 'Thêm lịch học'
+                                        : 'Chỉnh sửa lịch'),
                                 style: Theme.of(context).textTheme.titleLarge,
                               )),
                               IconButton(

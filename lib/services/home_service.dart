@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/home_models.dart';
+import 'study_data.dart';
 import '../models/schedule_recurrence.dart';
 import '../theme/app_palette.dart';
 
@@ -20,6 +21,26 @@ class HomeService {
   /// giả khi kiểm thử.
   SupabaseClient get _client => _injectedClient ?? Supabase.instance.client;
 
+  String? get accountId {
+    try { return _client.auth.currentUser?.id; } catch (_) { return null; }
+  }
+
+  Stream<String?> get accountChanges {
+    try {
+      return _client.auth.onAuthStateChange.map((event) => event.session?.user.id);
+    } catch (_) { return const Stream.empty(); }
+  }
+
+  String? get accountName {
+    try {
+      final user = _client.auth.currentUser;
+      return accountDisplayName(
+          metadata: user?.userMetadata, email: user?.email);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Tải toàn bộ dữ liệu trang chủ của người dùng hiện tại.
   Future<HomeSnapshot> loadSnapshot({DateTime? now}) async {
     final reference = now ?? DateTime.now();
@@ -29,32 +50,45 @@ class HomeService {
       return const HomeSnapshot.empty();
     }
 
-    final results = await Future.wait([
-      _client
-          .from('profiles')
-          .select('username')
-          .eq('id', userId)
-          .maybeSingle(),
-      _client
-          .from('subjects')
-          .select()
-          .eq('user_id', userId)
-          .order('subject_code', ascending: true),
-      _client
-          .from('schedules')
-          .select('*, subjects(subject_code, subject_name, color_code)')
-          .eq('user_id', userId),
-      _client
-          .from('schedule_exams')
-          .select('*, subjects(subject_code, subject_name, color_code)')
-          .eq('user_id', userId),
-      _client
-          .from('reminders')
-          .select(
-              'id, schedule_id, schedule_type, remind_before_minutes, is_enabled')
-          .eq('user_id', userId),
+    final subjectsFuture = _client
+        .from('subjects')
+        .select()
+        .eq('user_id', userId)
+        .order('subject_code', ascending: true)
+        .then((rows) => List<Map<String, dynamic>>.from(rows));
+    // Missing optional profile/reminder data must not erase a valid agenda.
+    final warnings = <String>[];
+    final profileFuture = _client
+        .from('profiles')
+        .select('username')
+        .eq('id', userId)
+        .maybeSingle()
+        .then<Map<String, dynamic>?>((row) => row)
+        .catchError((Object _) {
+      warnings.add('Chưa tải được tên hồ sơ.');
+      return null;
+    });
+    final remindersFuture = _client
+        .from('reminders')
+        .select(
+            'id, schedule_id, schedule_type, remind_before_minutes, is_enabled')
+        .eq('user_id', userId)
+        .then((rows) => List<Map<String, dynamic>>.from(rows))
+        .catchError((Object _) {
+      warnings.add('Chưa tải được thiết lập nhắc nhở.');
+      return <Map<String, dynamic>>[];
+    });
+    final results = await Future.wait<dynamic>([
+      profileFuture,
+      subjectsFuture,
+      loadOwnedStudyRows(_client, 'schedules', userId,
+          subjects: subjectsFuture),
+      loadOwnedStudyRows(_client, 'schedule_exams', userId,
+          subjects: subjectsFuture),
+      remindersFuture,
     ]);
-
+    if (_client.auth.currentUser?.id != userId)
+      throw StateError('Tài khoản đã thay đổi.');
     final profile = results[0] as Map<String, dynamic>?;
     final subjects = List<Map<String, dynamic>>.from(results[1] as List);
     final schedules = List<Map<String, dynamic>>.from(results[2] as List);
@@ -62,7 +96,11 @@ class HomeService {
     final reminders = List<Map<String, dynamic>>.from(results[4] as List);
 
     return buildSnapshot(
-      username: profile?['username']?.toString(),
+      username: accountDisplayName(
+          profileName: profile?['username']?.toString(),
+          metadata: _client.auth.currentUser?.userMetadata,
+          email: _client.auth.currentUser?.email),
+      loadWarnings: warnings,
       subjects: subjects,
       schedules: schedules,
       exams: exams,
@@ -78,12 +116,17 @@ class HomeService {
     required List<Map<String, dynamic>> exams,
     required List<Map<String, dynamic>> reminders,
     String? username,
+    List<String> loadWarnings = const [],
     DateTime? now,
   }) {
     final reference = now ?? DateTime.now();
 
     final weeklyLessons = <TodayLesson>[];
     final subjectLessonCount = <String, int>{};
+    final weekStart = DateTime(
+        reference.year, reference.month, reference.day - reference.weekday + 1);
+    final weekEnd = weekStart.add(const Duration(days: 6));
+    var weekOccurrenceCount = 0;
 
     for (final schedule in schedules) {
       final days = ScheduleRecurrence.frequency(schedule) == 'weekly'
@@ -93,6 +136,11 @@ class HomeService {
 
       final subject = _subjectMap(schedule['subjects']);
       final subjectId = schedule['subject_id']?.toString() ?? '';
+      final occurrences =
+          ScheduleRecurrence.between(schedule, weekStart, weekEnd).length;
+      subjectLessonCount[subjectId] =
+          (subjectLessonCount[subjectId] ?? 0) + occurrences;
+      weekOccurrenceCount += occurrences;
 
       for (final day in days) {
         weeklyLessons.add(
@@ -117,8 +165,6 @@ class HomeService {
             endDate: _dateValue(schedule['end_date']),
           ),
         );
-        subjectLessonCount[subjectId] =
-            (subjectLessonCount[subjectId] ?? 0) + 1;
       }
     }
 
@@ -267,6 +313,7 @@ class HomeService {
 
     return HomeSnapshot(
       username: username,
+      loadWarnings: loadWarnings,
       subjects: subjectSummaries,
       weeklyLessons: weeklyLessons,
       todayLessons: todayLessons,
@@ -274,7 +321,7 @@ class HomeService {
       upcomingLessons: nextLessons.take(3).toList(),
       reminders: reminderItems,
       enabledReminderCount: enabledReminderCount,
-      weeklyLessonCount: weeklyLessons.length,
+      weeklyLessonCount: weekOccurrenceCount,
     );
   }
 

@@ -1,3 +1,4 @@
+import '../services/study_data.dart';
 import 'package:untitled/widgets/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -165,6 +166,7 @@ class _SubjectManagementScreenState extends State<SubjectManagementScreen> {
     try {
       await _client.rpc('delete_calendar_subject',
           params: {'p_subject_id': subject['id']});
+      studyDataChanged();
       await _load();
     } catch (_) {
       if (mounted) {

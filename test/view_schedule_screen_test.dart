@@ -338,6 +338,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('schedule-add')));
     await tester.pumpAndSettle();
+    expect(find.text('Lịch thi'), findsOneWidget);
+    expect(find.text('Nhập ảnh / PDF'), findsOneWidget);
+    await tester.tap(find.text('Lịch học'));
+    await tester.pumpAndSettle();
     expect(find.byType(LessonEditor), findsOneWidget);
     expect(
         tester

@@ -36,18 +36,7 @@ void main() {
       expect(find.text('M'), findsNothing);
     });
 
-    testWidgets('Apple dùng icon Font Awesome brand',
-        (WidgetTester tester) async {
-      await tester.pumpWidget(
-        _wrap(const BrandIcon(provider: AuthProvider.apple)),
-      );
-
-      final faIcon = tester.widget<FaIcon>(find.byType(FaIcon));
-      expect(faIcon.icon, FontAwesomeIcons.apple.data);
-      expect(find.text('A'), findsNothing);
-    });
-
-    testWidgets('Cả 3 icon dùng font family FontAwesomeBrands',
+    testWidgets('Các icon dùng font family FontAwesomeBrands',
         (WidgetTester tester) async {
       for (final provider in AuthProvider.values) {
         await tester.pumpWidget(_wrap(BrandIcon(provider: provider)));
@@ -110,8 +99,8 @@ void main() {
           Row(
             children: [
               SocialAuthButton(
-                provider: AuthProvider.apple,
-                label: 'Apple',
+                provider: AuthProvider.microsoft,
+                label: 'Microsoft',
                 onPressed: () => tapped = true,
               ),
             ],

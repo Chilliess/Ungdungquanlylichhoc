@@ -1,3 +1,4 @@
+import '../services/study_data.dart';
 import 'package:untitled/widgets/app_notice.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -44,6 +45,9 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
   final TextEditingController _examSearchController = TextEditingController();
 
   int _defaultMinutes = 15;
+  bool _alarmMode = false;
+  bool get _supportsAlarm =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
   int _defaultVersion = 0;
   bool? _permissionGranted;
   String? _notificationNotice;
@@ -128,6 +132,9 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
   Future<void> _loadScreen() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      _alarmMode = _supportsAlarm &&
+          (prefs.getBool('alarm_mode_${_supabase.auth.currentUser?.id}') ??
+              false);
       _defaultMinutes =
           prefs.getInt('reminder_default_${_supabase.auth.currentUser?.id}') ??
               15;
@@ -217,16 +224,12 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
 
     try {
       // Tải lịch học từ bảng schedules
-      final scheduleResponse = await _supabase
-          .from('schedules')
-          .select('*, subjects(subject_code, subject_name)')
-          .eq('user_id', userId);
+      final scheduleResponse =
+          await loadOwnedStudyRows(_supabase, 'schedules', userId);
 
       // Tải lịch kiểm tra từ bảng schedule_exams
-      final examResponse = await _supabase
-          .from('schedule_exams')
-          .select('*, subjects(subject_code, subject_name)')
-          .eq('user_id', userId);
+      final examResponse =
+          await loadOwnedStudyRows(_supabase, 'schedule_exams', userId);
 
       // Tải tất cả nhắc nhở từ bảng reminders chung
       final reminderResponse =
@@ -488,20 +491,7 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
     candidates.sort((a, b) => a.scheduledDate.compareTo(b.scheduledDate));
     final limited = candidates.take(50);
 
-    const details = NotificationDetails(
-      android: AndroidNotificationDetails(
-        'schedule_reminders',
-        'Nhắc nhở lịch',
-        channelDescription: 'Thông báo trước giờ bắt đầu',
-        importance: Importance.max,
-        priority: Priority.high,
-      ),
-      iOS: DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-      ),
-    );
+    final details = _notificationDetails();
 
     for (final item in limited) {
       await _notifications.zonedSchedule(
@@ -510,11 +500,41 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
         item.body,
         item.scheduledDate,
         details,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        androidScheduleMode: _alarmMode
+            ? AndroidScheduleMode.exactAllowWhileIdle
+            : AndroidScheduleMode.inexactAllowWhileIdle,
         payload: item.id.toString(),
       );
     }
   }
+
+  NotificationDetails _notificationDetails() => NotificationDetails(
+        android: AndroidNotificationDetails(
+          _alarmMode ? 'study_alarms_v1' : 'schedule_reminders',
+          _alarmMode ? 'Báo thức học tập' : 'Nhắc nhở lịch',
+          channelDescription: 'Thông báo trước giờ bắt đầu',
+          importance: Importance.max,
+          priority: Priority.high,
+          category: _alarmMode
+              ? AndroidNotificationCategory.alarm
+              : AndroidNotificationCategory.reminder,
+          audioAttributesUsage: _alarmMode
+              ? AudioAttributesUsage.alarm
+              : AudioAttributesUsage.notification,
+          additionalFlags: _alarmMode ? Int32List.fromList([4]) : null,
+          actions: _alarmMode
+              ? const [
+                  AndroidNotificationAction('stop', 'Dừng',
+                      cancelNotification: true)
+                ]
+              : null,
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      );
 
   String _formatDays(dynamic rawDays) {
     const names = {
@@ -643,6 +663,80 @@ class _ScheduleAnnouncementScreenState extends State<ScheduleAnnouncementScreen>
   Widget _list(bool exam) {
     final items = exam ? _filteredExams : _filteredSchedules;
     return ListView(padding: const EdgeInsets.all(20), children: [
+      Card(
+          elevation: 0,
+          child: Column(children: [
+            SwitchListTile(
+                secondary: const Icon(Icons.alarm),
+                title: const Text('Chế độ báo thức'),
+                subtitle: Text(_supportsAlarm
+                    ? 'Phát âm báo lặp lại cho các lịch đã bật nhắc nhở'
+                    : 'Báo thức hiện hỗ trợ bản Android. iOS dùng thông báo có âm thanh; web không bảo đảm reo khi đóng ứng dụng.'),
+                value: _alarmMode,
+                onChanged: !_supportsAlarm || _saving
+                    ? null
+                    : (value) async {
+                        if (!await confirmAction(context,
+                                message: value
+                                    ? 'Chuyển các nhắc nhở sang báo thức?'
+                                    : 'Chuyển về thông báo thường?') ||
+                            !mounted) {
+                          return;
+                        }
+                        if (value) {
+                          final allowed = await _notifications
+                              .resolvePlatformSpecificImplementation<
+                                  AndroidFlutterLocalNotificationsPlugin>()
+                              ?.requestExactAlarmsPermission();
+                          if (allowed != true) {
+                            if (mounted) {
+                              AppNotice.show(
+                                  context,
+                                  const SnackBar(
+                                      content: Text(
+                                          'Cần cho phép báo thức chính xác trong cài đặt thiết bị.')));
+                            }
+                            return;
+                          }
+                        }
+                        final old = _alarmMode;
+                        setState(() {
+                          _saving = true;
+                          _alarmMode = value;
+                        });
+                        try {
+                          await _rescheduleAllEnabledReminders();
+                          await (await SharedPreferences.getInstance()).setBool(
+                              'alarm_mode_${_supabase.auth.currentUser?.id}',
+                              value);
+                        } catch (_) {
+                          _alarmMode = old;
+                          if (mounted) {
+                            AppNotice.show(
+                                context,
+                                const SnackBar(
+                                    content: Text(
+                                        'Chưa đổi được chế độ. Kiểm tra quyền báo thức.')));
+                          }
+                        } finally {
+                          if (mounted) setState(() => _saving = false);
+                        }
+                      }),
+            if (_supportsAlarm)
+              TextButton.icon(
+                  onPressed: _notificationsInitialized
+                      ? () async {
+                          await _notifications.show(
+                              2147483000,
+                              'Thử nhắc học',
+                              'Nhấn Dừng hoặc chạm thông báo để tắt.',
+                              _notificationDetails());
+                        }
+                      : null,
+                  icon: const Icon(Icons.volume_up_outlined),
+                  label: const Text('Thử âm báo')),
+          ])),
+      const SizedBox(height: 16),
       DropdownButtonFormField<int>(
           key: ValueKey('$_defaultMinutes-$_defaultVersion'),
           initialValue: _defaultMinutes,

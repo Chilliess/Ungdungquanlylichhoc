@@ -1,8 +1,10 @@
+import '../services/study_data.dart';
 import 'package:untitled/widgets/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'confirm_action.dart';
+import 'delete_account_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -51,9 +53,11 @@ class _AccountScreenState extends State<AccountScreen> {
         if (!mounted) {
           return;
         }
-        if (data != null && data['username'] != null) {
-          _usernameController.text = data['username'];
-        }
+        _usernameController.text = accountDisplayName(
+                profileName: data?['username']?.toString(),
+                metadata: user.userMetadata,
+                email: user.email) ??
+            '';
       }
     } catch (e) {
       if (mounted) {
@@ -93,6 +97,8 @@ class _AccountScreenState extends State<AccountScreen> {
         'id': user.id,
         'username': newUsername,
       });
+
+      studyDataChanged();
 
       // 2. Cập nhật Mật khẩu trong Supabase Auth (nếu người dùng có nhập mật khẩu mới)
       if (newPassword.isNotEmpty) {
@@ -294,6 +300,19 @@ class _AccountScreenState extends State<AccountScreen> {
                                   child: Text(_isLoading
                                       ? 'Đang lưu…'
                                       : 'Lưu thay đổi')),
+                              const SizedBox(height: 24),
+                              TextButton.icon(
+                                onPressed: _isLoading
+                                    ? null
+                                    : () => Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                const DeleteAccountScreen())),
+                                style: TextButton.styleFrom(
+                                    foregroundColor: Colors.red.shade700),
+                                icon: const Icon(Icons.person_remove_outlined),
+                                label: const Text('Xóa tài khoản'),
+                              ),
                             ])),
                   ))),
     );

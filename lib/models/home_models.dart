@@ -213,6 +213,7 @@ class ReminderItem {
 class HomeSnapshot {
   const HomeSnapshot({
     required this.username,
+    this.loadWarnings = const [],
     required this.subjects,
     required this.weeklyLessons,
     required this.todayLessons,
@@ -225,6 +226,7 @@ class HomeSnapshot {
 
   const HomeSnapshot.empty()
       : username = null,
+        loadWarnings = const [],
         subjects = const [],
         weeklyLessons = const [],
         todayLessons = const [],
@@ -236,6 +238,7 @@ class HomeSnapshot {
 
   /// Tên hiển thị lấy từ bảng `profiles`.
   final String? username;
+  final List<String> loadWarnings;
 
   /// Danh sách môn học kèm số buổi học trong tuần.
   final List<SubjectSummary> subjects;

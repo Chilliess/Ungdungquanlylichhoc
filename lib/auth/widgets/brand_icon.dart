@@ -5,7 +5,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 enum AuthProvider {
   google,
   microsoft,
-  apple,
 }
 
 /// Nhãn hiển thị của từng nhà cung cấp.
@@ -16,13 +15,11 @@ extension AuthProviderLabel on AuthProvider {
         return 'Google';
       case AuthProvider.microsoft:
         return 'Microsoft';
-      case AuthProvider.apple:
-        return 'Apple';
     }
   }
 }
 
-/// Biểu tượng thương hiệu của nhà cung cấp (Google / Microsoft / Apple).
+/// Biểu tượng thương hiệu của nhà cung cấp (Google / Microsoft).
 ///
 /// Dùng `FaIcon` thay cho `Icon` vì icon Font Awesome không vuông, nếu dùng
 /// `Icon` chuẩn sẽ bị cắt/mis-align.
@@ -72,13 +69,6 @@ class BrandIcon extends StatelessWidget {
           color: _microsoftBlue,
         );
 
-      case AuthProvider.apple:
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return FaIcon(
-          FontAwesomeIcons.apple,
-          size: size,
-          color: isDark ? Colors.white : Colors.black,
-        );
     }
   }
 }

@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:untitled/splash/splashscreen.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
+import 'services/app_preferences.dart';
+import 'widgets/assistant_overlay.dart';
+import 'widgets/account_gate.dart';
+import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,55 +14,52 @@ Future<void> main() async {
   await initializeDateFormatting('vi_VN', null);
   await Supabase.initialize(
       url: 'https://fjwdaccejrodpcicyxrc.supabase.co',
-      anonKey: 'sb_publishable_99PN2b4I_XNZ8bf7yctZGw_M1Rl9mqs'
-  );
+      anonKey: 'sb_publishable_99PN2b4I_XNZ8bf7yctZGw_M1Rl9mqs');
 
-  await _loadSavedTheme();
+  await appPreferences.load();
 
   runApp(const MyApp());
-}
-
-Future<void> _loadSavedTheme() async {
-  final prefs = await SharedPreferences.getInstance();
-  final isDark = prefs.getBool('is_dark_mode') ?? false;
-  themeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  Widget _accountServices(Widget child) {
+    // Splash/login can also render before backend initialization (previews and
+    // startup tests). A real initialized session always passes through the gate.
+    try {
+      Supabase.instance.client;
+    } catch (_) {
+      return child;
+    }
+    return AccountGate(child: AssistantOverlay(child: child));
+  }
+
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: themeNotifier,
-      builder: (context, currentThemeMode, child) {
-      return MaterialApp(
-        title: 'Quản lý lịch học',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          brightness: Brightness.light,
-          primarySwatch: Colors.blue,
-          scaffoldBackgroundColor: Colors.white,
-          appBarTheme: const AppBarTheme(
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.black,
-          ),
-        ),
-
-        // Định nghĩa Dark Theme
-        darkTheme: ThemeData(
-          brightness: Brightness.dark,
-          primarySwatch: Colors.blue,
-          scaffoldBackgroundColor: const Color(0xFF121212),
-          appBarTheme: const AppBarTheme(
-            backgroundColor: Color(0xFF1F1F1F),
-            foregroundColor: Colors.white,
-          ),
-        ),
-
-        themeMode: currentThemeMode,
-        home: Splashscreen(),
+    return ListenableBuilder(
+      listenable: appPreferences,
+      builder: (context, child) {
+        return MaterialApp(
+          title: 'Quản lý lịch học',
+          debugShowCheckedModeBanner: false,
+          theme: studyTheme(Brightness.light),
+          darkTheme: studyTheme(Brightness.dark),
+          themeMode: appPreferences.theme,
+          builder: (context, child) {
+            final media = MediaQuery.of(context);
+            return MediaQuery(
+              data: media.copyWith(
+                disableAnimations:
+                    media.disableAnimations || appPreferences.reduceMotion,
+                textScaler: TextScaler.linear(
+                    media.textScaler.scale(1) * appPreferences.textScale),
+              ),
+              child: _accountServices(child ?? const SizedBox.shrink()),
+            );
+          },
+          home: const Splashscreen(),
         );
       },
     );

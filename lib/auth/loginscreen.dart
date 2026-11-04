@@ -281,7 +281,7 @@ class _LoginscreenState extends State<Loginscreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Social buttons: Google, Microsoft, Apple
+                    // Social buttons: Google, Microsoft
                     Row(
                       children: [
                         SocialAuthButton(
@@ -294,12 +294,6 @@ class _LoginscreenState extends State<Loginscreen> {
                           provider: AuthProvider.microsoft,
                           label: AuthProvider.microsoft.label,
                           onPressed: () => _handleOAuth(AuthProvider.microsoft),
-                        ),
-                        const SizedBox(width: 12),
-                        SocialAuthButton(
-                          provider: AuthProvider.apple,
-                          label: AuthProvider.apple.label,
-                          onPressed: () => _handleOAuth(AuthProvider.apple),
                         ),
                       ],
                     ),

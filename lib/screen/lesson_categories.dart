@@ -1,3 +1,4 @@
+import '../services/study_data.dart';
 import 'confirm_action.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -58,6 +59,7 @@ class SupabaseLessonCategoryStore extends LessonCategoryStore {
             ? null
             : '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}',
       });
+      studyDataChanged();
       await load();
     } on PostgrestException catch (error) {
       if (['PGRST202', 'PGRST205', '42P01'].contains(error.code)) {
@@ -263,7 +265,9 @@ class _CategoryPickerState extends State<_CategoryPicker> {
       } else {
         if (!await confirmAction(context,
                 message: 'Lưu thay đổi cho nhãn “$oldName”?') ||
-            !mounted) return false;
+            !mounted) {
+          return false;
+        }
         await widget.store.rename(oldName, name, color: _color);
       }
       if (!mounted) return false;
@@ -299,7 +303,9 @@ class _CategoryPickerState extends State<_CategoryPicker> {
     if (!await confirmAction(context,
             deleting: true,
             message: 'Xóa nhãn “$name” khỏi các lịch đang sử dụng?') ||
-        !mounted) return;
+        !mounted) {
+      return;
+    }
     try {
       await widget.store.delete(name);
       if (!mounted) return;

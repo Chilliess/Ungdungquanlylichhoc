@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'services/study_data.dart';
+import 'widgets/assistant_overlay.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -10,6 +13,8 @@ import 'screen/statistical.dart';
 import 'screen/subject_management_screen.dart';
 import 'screen/view_schedule_screen.dart';
 import 'services/home_service.dart';
+import 'services/learning_store.dart';
+import 'screen/tasks_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.service});
@@ -18,34 +23,88 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late final HomeService _service = widget.service ?? HomeService();
   HomeSnapshot _snapshot = const HomeSnapshot.empty();
-  bool _loading = true, _failed = false;
+  bool _loading = true, _failed = false, _hasSnapshot = false;
+  int _loadVersion = 0;
+  Timer? _refreshDebounce;
+  StreamSubscription<String?>? _accounts;
+  String? _owner;
   DateTime? _selectedUpcomingDate;
+  bool _upcomingDatePicked = false;
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    studyDataRevision.addListener(_dataChanged);
+    learningStore.addListener(_learningChanged);
+    _owner = _service.accountId;
+    _accounts = _service.accountChanges.listen((owner) {
+      if (!mounted || owner == _owner) return;
+      _refreshDebounce?.cancel();
+      _loadVersion++;
+      setState(() {
+        _owner = owner;
+        _snapshot = const HomeSnapshot.empty();
+        _hasSnapshot = false;
+        _selectedUpcomingDate = null;
+        _upcomingDatePicked = false;
+      });
+      _load();
+    });
     _load();
   }
 
+  void _dataChanged() {
+    _refreshDebounce?.cancel();
+    _accounts?.cancel();
+    _refreshDebounce = Timer(const Duration(milliseconds: 120), () {
+      if (mounted) _load(showLoader: false);
+    });
+  }
+
+  void _learningChanged() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _load(showLoader: false);
+  }
+
+  @override
+  void dispose() {
+    _refreshDebounce?.cancel();
+    studyDataRevision.removeListener(_dataChanged);
+    learningStore.removeListener(_learningChanged);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   Future<void> _load({bool showLoader = true}) async {
+    final version = ++_loadVersion;
     if (showLoader) setState(() => _loading = true);
     try {
       final data = await _service.loadSnapshot();
-      if (mounted) {
+      await learningStore.load();
+      if (mounted && version == _loadVersion) {
         setState(() {
           _snapshot = data;
+          _hasSnapshot = true;
           final now = DateTime.now();
-          _selectedUpcomingDate ??= data.upcomingLessons.isEmpty
-              ? DateTime(now.year, now.month, now.day)
-              : data.upcomingLessons.first.date;
+          if (!_upcomingDatePicked)
+            _selectedUpcomingDate = data.upcomingLessons.isEmpty
+                ? DateTime(now.year, now.month, now.day)
+                : data.upcomingLessons.first.date;
           _loading = false;
           _failed = false;
         });
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted && version == _loadVersion) {
         setState(() {
           _loading = false;
           _failed = true;
@@ -78,36 +137,78 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _header() {
-    final name = _snapshot.username?.trim() ?? '';
-    return Row(children: [
-      Expanded(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(name.isEmpty ? 'Xin chào!' : 'Xin chào, $name',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 4),
-        Text(DateFormat('EEEE, dd/MM/yyyy', 'vi_VN').format(DateTime.now()),
+    final name = _snapshot.username?.trim().isNotEmpty == true
+        ? _snapshot.username!.trim()
+        : (_service.accountName ?? '');
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+            colors: [Color(0xFF6254D9), Color(0xFF8372ED)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight),
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(
+              color: const Color(0xFF6254D9).withValues(alpha: .16),
+              blurRadius: 24,
+              offset: const Offset(0, 10))
+        ],
+      ),
+      child: LayoutBuilder(builder: (context, box) {
+        final compact = box.maxWidth < 500;
+        final controls = Row(mainAxisSize: MainAxisSize.min, children: [
+          IconButton(
+              key: const ValueKey('home-reminders'),
+              tooltip: 'Nhắc nhở',
+              onPressed: () => _open(const ScheduleAnnouncementScreen()),
+              icon: const Icon(Icons.notifications_none_rounded,
+                  color: Colors.white)),
+          IconButton(
+              tooltip: 'Tài khoản',
+              onPressed: () => _open(const AccountScreen()),
+              icon: const Icon(Icons.account_circle_outlined,
+                  color: Colors.white)),
+        ]);
+        const eyebrow = Text('GÓC HỌC TẬP CỦA BẠN',
             style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant)),
-      ])),
-      IconButton(
-          key: const ValueKey('home-reminders'),
-          tooltip: 'Nhắc nhở',
-          onPressed: () => _open(const ScheduleAnnouncementScreen()),
-          icon: const Icon(Icons.notifications_none_outlined)),
-      IconButton(
-          tooltip: 'Tài khoản',
-          onPressed: () => _open(const AccountScreen()),
-          icon: const Icon(Icons.account_circle_outlined)),
-    ]);
+                color: Colors.white70,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.2));
+        final welcome =
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (!compact) ...[eyebrow, const SizedBox(height: 10)],
+          Text(name.isEmpty ? 'Xin chào!' : 'Xin chào, $name',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: compact ? 24 : 26,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          Text(DateFormat('EEEE, dd/MM/yyyy', 'vi_VN').format(DateTime.now()),
+              style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        ]);
+        return compact
+            ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Row(children: [const Expanded(child: eyebrow), controls]),
+                const SizedBox(height: 8),
+                welcome
+              ])
+            : Row(children: [
+                Expanded(child: welcome),
+                const SizedBox(width: 12),
+                controls
+              ]);
+      }),
+    );
   }
 
   Widget _surface(Widget child) => Material(
-        color: Theme.of(context).colorScheme.surface,
+        color: Theme.of(context).brightness == Brightness.dark
+            ? Theme.of(context).colorScheme.surfaceContainer
+            : Colors.white,
         shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
             side: BorderSide(
                 color: Theme.of(context).colorScheme.outlineVariant)),
         clipBehavior: Clip.antiAlias,
@@ -178,7 +279,11 @@ class _HomeScreenState extends State<HomeScreen> {
         initialDate: initial,
         firstDate: DateTime(2020),
         lastDate: DateTime(2100, 12, 31));
-    if (date != null && mounted) setState(() => _selectedUpcomingDate = date);
+    if (date != null && mounted)
+      setState(() {
+        _selectedUpcomingDate = date;
+        _upcomingDatePicked = true;
+      });
   }
 
   Widget _upcomingHeader() {
@@ -283,16 +388,32 @@ class _HomeScreenState extends State<HomeScreen> {
       onTap: () => _open(screen));
   Widget _tools() =>
       Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (learningStore.pending.isNotEmpty) ...[
+          Text('Deadline gần nhất',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          _surface(ListTile(
+              leading: const Icon(Icons.flag_outlined),
+              title: Text(learningStore.pending.first['title']),
+              subtitle: Text(DateFormat('dd/MM/yyyy HH:mm').format(
+                  DateTime.parse(learningStore.pending.first['deadline']))),
+              onTap: () => _open(const TasksScreen()))),
+          const SizedBox(height: 16),
+        ],
         Text('Quản lý', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 12),
         _surface(Column(children: [
           _tool(Icons.school_outlined, 'Môn học',
               const SubjectManagementScreen()),
+          const Divider(height: 1, indent: 56, endIndent: 16),
+          _tool(Icons.insights_rounded, 'Thống kê', const StatisticalScreen()),
         ])),
       ]);
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF11131D)
+            : const Color(0xFFF5F6FB),
         body: SafeArea(
             child: LayoutBuilder(
                 builder: (context, viewport) => ScrollConfiguration(
@@ -320,7 +441,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                     children: [
                                       _header(),
                                       const SizedBox(height: 16),
-                                      const Divider(height: 1),
                                       const SizedBox(height: 20),
                                       Align(
                                           alignment: Alignment.centerLeft,
@@ -334,14 +454,19 @@ class _HomeScreenState extends State<HomeScreen> {
                                               label:
                                                   const Text('Thêm lịch học'))),
                                       const SizedBox(height: 20),
-                                      if (_failed)
+                                      if (_failed ||
+                                          _snapshot.loadWarnings.isNotEmpty)
                                         Padding(
                                             padding: const EdgeInsets.only(
                                                 bottom: 16),
                                             child: Row(children: [
-                                              const Expanded(
-                                                  child: Text(
-                                                      'Không tải được lịch. Vui lòng thử lại.')),
+                                              Expanded(
+                                                  child: Text(_failed
+                                                      ? (_hasSnapshot
+                                                          ? 'Chưa cập nhật được lịch. Đang hiển thị dữ liệu gần nhất.'
+                                                          : 'Không tải được lịch. Vui lòng thử lại.')
+                                                      : _snapshot.loadWarnings
+                                                          .join(' '))),
                                               TextButton(
                                                   onPressed: () => _load(),
                                                   child: const Text('Thử lại')),
@@ -352,7 +477,23 @@ class _HomeScreenState extends State<HomeScreen> {
                                             child: Center(
                                                 child:
                                                     CircularProgressIndicator()))
-                                      else if (viewport.maxWidth >= 850)
+                                      else if (_failed && !_hasSnapshot) ...[
+                                        _surface(const Padding(
+                                            padding: EdgeInsets.all(24),
+                                            child: Column(children: [
+                                              Icon(Icons.cloud_off_outlined,
+                                                  size: 36),
+                                              SizedBox(height: 12),
+                                              Text(
+                                                  'Chưa xác định được lịch hôm nay'),
+                                              SizedBox(height: 6),
+                                              Text(
+                                                  'Tải lại dữ liệu để xem lịch chính xác.',
+                                                  textAlign: TextAlign.center)
+                                            ]))),
+                                        const SizedBox(height: 24),
+                                        _tools(),
+                                      ] else if (viewport.maxWidth >= 850)
                                         Row(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
@@ -377,65 +518,52 @@ class _HomeScreenState extends State<HomeScreen> {
                             ]),
                       ),
                     ))),
-        bottomNavigationBar: DecoratedBox(
-          decoration: BoxDecoration(
-              border: Border(
-                  top: BorderSide(
-                      color: Theme.of(context).colorScheme.outlineVariant))),
-          child: Stack(children: [
-            NavigationBar(
-                selectedIndex: 0,
-                onDestinationSelected: (index) {
-                  if (index == 0) {
-                    _load(showLoader: false);
-                    return;
-                  }
-                  _open([
-                    const ViewScheduleScreen(),
-                    const StatisticalScreen(),
-                    const SettingsScreen()
-                  ][index - 1]);
-                },
-                destinations: const [
-                  NavigationDestination(
-                      icon: Icon(Icons.home_outlined),
-                      selectedIcon: Icon(Icons.home),
-                      label: 'Trang chủ'),
-                  NavigationDestination(
-                      icon: Icon(Icons.calendar_today_outlined),
-                      label: 'Lịch học'),
-                  NavigationDestination(
-                      icon: Icon(Icons.bar_chart_outlined), label: 'Thống kê'),
-                  NavigationDestination(
-                      icon: Icon(Icons.settings_outlined), label: 'Cài đặt'),
-                ]),
-            Positioned.fill(
-                child: IgnorePointer(
-                    child: Row(children: [
-              const Expanded(child: SizedBox()),
-              VerticalDivider(
-                  width: 1,
-                  thickness: 1,
-                  indent: 16,
-                  endIndent: 16,
-                  color: Theme.of(context).colorScheme.outlineVariant),
-              const Expanded(child: SizedBox()),
-              VerticalDivider(
-                  width: 1,
-                  thickness: 1,
-                  indent: 16,
-                  endIndent: 16,
-                  color: Theme.of(context).colorScheme.outlineVariant),
-              const Expanded(child: SizedBox()),
-              VerticalDivider(
-                  width: 1,
-                  thickness: 1,
-                  indent: 16,
-                  endIndent: 16,
-                  color: Theme.of(context).colorScheme.outlineVariant),
-              const Expanded(child: SizedBox()),
-            ]))),
-          ]),
+        bottomNavigationBar: SafeArea(
+          top: false,
+          child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: ValueListenableBuilder<bool>(
+                      valueListenable: assistantDialog,
+                      builder: (context, chatOpen, _) => NavigationBar(
+                            height: 76,
+                            selectedIndex: chatOpen ? 3 : 0,
+                            onDestinationSelected: (index) {
+                              if (index == 3) {
+                                assistantDialog.value = true;
+                                return;
+                              }
+                              if (index == 0) {
+                                _load(showLoader: false);
+                                return;
+                              }
+                              _open(index == 1
+                                  ? const ViewScheduleScreen()
+                                  : index == 2
+                                      ? const TasksScreen()
+                                      : const SettingsScreen());
+                            },
+                            destinations: const [
+                              NavigationDestination(
+                                  icon: Icon(Icons.home_outlined),
+                                  selectedIcon: Icon(Icons.home_rounded),
+                                  label: 'Trang chủ'),
+                              NavigationDestination(
+                                  icon: Icon(Icons.calendar_month_outlined),
+                                  label: 'Lịch học'),
+                              NavigationDestination(
+                                  icon: Icon(Icons.checklist_rounded),
+                                  label: 'Công việc'),
+                              NavigationDestination(
+                                  icon: Icon(Icons.forum_outlined),
+                                  selectedIcon: Icon(Icons.forum_rounded),
+                                  label: 'Chat AI'),
+                              NavigationDestination(
+                                  icon: Icon(Icons.tune_rounded),
+                                  label: 'Cài đặt'),
+                            ],
+                          )))),
         ),
       );
 }

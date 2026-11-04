@@ -154,6 +154,8 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Thống kê').last);
+    await tester.pumpAndSettle();
     await _mouseTap(tester, find.text('Thống kê').last);
     expect(find.byType(StatisticalScreen), findsOneWidget);
     await tester.pageBack();
@@ -179,7 +181,8 @@ void main() {
     final rect = tester.getRect(find.byKey(const ValueKey('home-content')));
     expect(rect.width, 1040);
     expect(rect.center.dx, 960);
-    expect(tester.getSize(find.byType(ListTile).first).height, lessThan(85));
+    expect(tester.getSize(find.widgetWithText(ListTile, 'Môn học')).height,
+        lessThan(85));
     expect(tester.takeException(), isNull);
   });
   testWidgets('add lesson opens the calendar editor directly', (tester) async {
@@ -257,7 +260,7 @@ void main() {
   });
 
   testWidgets(
-      'reminders bell is beside account and navigation sections have separators',
+      'reminders and account stay together with the new Chat AI destination',
       (tester) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await _pumpHome(tester, _FakeHomeService());
@@ -266,7 +269,14 @@ void main() {
     expect(bell.right, lessThanOrEqualTo(account.left));
     expect(bell.center.dy, account.center.dy);
     expect(find.text('Nhắc nhở'), findsNothing);
-    expect(find.byType(VerticalDivider), findsNWidgets(3));
+    expect(
+        find.descendant(
+            of: find.byType(NavigationBar), matching: find.text('Chat AI')),
+        findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byType(NavigationBar), matching: find.text('Thống kê')),
+        findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

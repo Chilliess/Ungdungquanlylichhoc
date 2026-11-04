@@ -84,9 +84,11 @@ lib/
 ├── homescreen.dart
 └── main.dart   # Khởi tạo Supabase, ngôn ngữ và chủ đề
 
-supabase/
-├── migrations/ # Cập nhật schema cho database đã được tạo trước đó
-└── README.md   # Mô tả và thứ tự áp dụng migration
+backend/
+├── functions/  # Mã máy chủ: Groq, nhập lịch, xóa tài khoản
+├── deploy.ps1  # Triển khai hàm từ thư mục backend
+├── tests/      # Kiểm tra backend giả lập
+└── README.md   # Hướng dẫn database và cấu hình dịch vụ
 
 supabase_database.sql # Schema và các hàm SQL tổng hợp
 test/                  # Kiểm thử widget, model, service và luồng giao diện
@@ -163,15 +165,16 @@ flutter run
 
 ### Database đã tồn tại
 
-Không chạy lại toàn bộ SQL tổng trên một database đang có nếu chưa xác định rõ ảnh hưởng. Đọc [`supabase/README.md`](supabase/README.md), kiểm tra schema hiện tại và chỉ áp dụng những migration còn thiếu trong `supabase/migrations/`.
-
-Các migration cập nhật chức năng lịch phụ thuộc vào schema ban đầu; README trong thư mục `supabase/` mô tả thứ tự và mục đích từng bản. SQL tổng đã bao gồm các cập nhật này cho trường hợp tạo database mới.
+Đọc [`backend/README.md`](backend/README.md), kiểm tra schema hiện tại và áp dụng
+các khối transaction còn thiếu trong `supabase_database.sql`. Đây là file SQL duy
+nhất của dự án. Các truy vấn kiểm tra nằm trong [`backend/DATABASE_CHECKS.md`](backend/DATABASE_CHECKS.md).
+Không chạy lại các định nghĩa cũ sau các bản cập nhật ở cuối file.
 
 ### Kết nối ứng dụng
 
 Ứng dụng khởi tạo Supabase trong `lib/main.dart`. Cập nhật `url` và `anonKey` bằng Project URL và publishable key (hoặc anon key) của project Supabase bạn vừa tạo, sau đó chạy lại ứng dụng.
 
-Ứng dụng Flutter là client công khai: **không** đặt `service_role` key, database password hoặc secret key trong mã ứng dụng. Kiểm tra RLS trước khi dùng dữ liệu thật; trong SQL tổng hiện tại, các bảng lịch, môn, nhắc và nhãn giới hạn truy cập theo chủ sở hữu, còn chính sách đọc `profiles` cho phép người dùng đã xác thực đọc hồ sơ. Hãy điều chỉnh chính sách này nếu tên hồ sơ cần được giữ riêng tư. Nếu bật xác nhận email hoặc khôi phục mật khẩu, cấu hình email và URL chuyển hướng tương ứng trong Supabase Auth.
+Ứng dụng Flutter là client công khai: **không** đặt `service_role` key, database password hoặc secret key trong mã ứng dụng. Kiểm tra RLS trước khi dùng dữ liệu thật; trong SQL tổng hiện tại, các bảng lịch, môn, nhắc và nhãn giới hạn truy cập theo chủ sở hữu, và `profiles` chỉ cho phép người dùng đọc hồ sơ của chính mình. Nếu bật xác nhận email hoặc khôi phục mật khẩu, cấu hình email và URL chuyển hướng tương ứng trong Supabase Auth.
 
 ## Nhập lịch từ CSV
 
