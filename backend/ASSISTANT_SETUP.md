@@ -1,49 +1,69 @@
-# Trợ lý mini và xóa tài khoản
+# Trợ lý AI, nhập lịch và phần học tập
 
-**Trợ lý tư vấn đã chuyển sang Groq.** Làm theo
-[GROQ_SETUP.md](GROQ_SETUP.md) để tạo key và triển khai `study-assistant`.
-Nhập ảnh/PDF (`import-timetable`) vẫn dùng OpenAI. Không đưa API key hoặc
-service-role key vào Flutter, SQL hay Git.
+Trợ lý hiện dùng **Groq**. Không còn dùng Gemini hoặc công cụ tra cứu web.
+Mã máy chủ nằm trong `backend/functions/`; file SQL duy nhất là
+`../supabase_database.sql`.
 
-**Cập nhật 04/11/2026:** xóa tài khoản đã chuyển sang xác nhận `delete`, chờ 7 ngày và khôi phục có xác nhận. Bắt buộc làm theo `ACCOUNT_DELETION_SETUP.md` cho phần xóa tài khoản; không dùng luồng OTP cũ.
+## Cấu hình các chức năng
 
-Frontend đã nối với hai Edge Functions. Không đưa OPENAI_API_KEY hoặc service-role key vào Flutter.
+| Hàm | Cấu hình cần thiết | Vai trò |
+| --- | --- | --- |
+| `study-assistant` | `GROQ_API_KEY`, `GROQ_MODEL`; ảnh tùy `GROQ_VISION_MODEL` | Hỏi đáp, đọc lịch liên quan, đề xuất tạo/xóa lịch |
+| `import-timetable` | `OPENAI_API_KEY`, `OPENAI_VISION_MODEL` | Đọc ảnh/PDF tối đa 5 MB, trả tối đa 50 buổi để kiểm tra |
+| `delete-account` | Cấu hình Supabase và SQL vòng đời tài khoản | Yêu cầu xóa sau 7 ngày, có xác nhận |
+| `purge-accounts` | Service-role/worker secret theo tài liệu riêng | Xóa tài khoản hết hạn từ tác vụ máy chủ |
+
+Đặt giá trị bí mật trong **Supabase Edge Functions → Secrets**. Không đưa key,
+mật khẩu hay service-role key vào Flutter, SQL hoặc Git. Xem `GROQ_SETUP.md`
+và `ACCOUNT_DELETION_SETUP.md` cho từng chức năng.
 
 ## Triển khai
 
-1. Database mới: chạy `../supabase_database.sql`. Database đang có: xem README.md và áp dụng các khối transaction còn thiếu, đặc biệt ASSISTANT_QUOTA và ACCOUNT_CASCADE_AUDIT. Nếu có lỗi khóa ngoại, xử lý cấu trúc được báo trước khi bật xóa tài khoản.
-2. Áp dụng phần thời gian chờ trong file SQL chính và cấu hình tác vụ xóa theo `ACCOUNT_DELETION_SETUP.md`. Luồng xóa tài khoản không dùng OTP nữa.
-3. Với trợ lý: đặt secrets `GROQ_API_KEY` và `GROQ_MODEL` theo `GROQ_SETUP.md`. Với nhập ảnh/PDF: đặt `OPENAI_API_KEY` và `OPENAI_VISION_MODEL` riêng.
-4. Trong terminal VS Code, dùng Supabase CLI đã cài:
+1. Database mới: chạy SQL chính. Database đã có dữ liệu: kiểm tra và áp dụng
+   các khối transaction còn thiếu theo `README.md` và `DATABASE_CHECKS.md`.
+2. Đăng nhập Supabase CLI rồi chạy từ thư mục gốc:
 
 ```powershell
 npx supabase login
-.\backend\deploy.ps1 -ProjectRef MA_PROJECT_CUA_BAN -Functions study-assistant,delete-account
+.\backend\deploy.ps1 -ProjectRef MA_PROJECT_CUA_BAN -Functions study-assistant,import-timetable,delete-account,purge-accounts
 ```
 
-`--no-verify-jwt` tắt kiểm tra JWT cũ của gateway để hỗ trợ khóa publishable mới. Cả hai hàm vẫn bắt buộc xác thực access token bằng `auth.getUser()` trước mọi thao tác. Không bỏ bước xác thực này.
+Script dựng bố cục Supabase CLI trong thư mục tạm, không nhân đôi mã nguồn.
+Gateway dùng Verify JWT tắt để hỗ trợ khóa publishable; từng hàm vẫn xác thực
+người gọi và quyền tài khoản trong mã. Không bỏ các kiểm tra này.
 
-## Phạm vi
+## Hành vi trong ứng dụng
 
-- AI hỏi đáp qua Groq Chat Completions, không tự đọc hay sửa lịch. Giao diện yêu cầu đồng ý gửi hội thoại cho Groq và dịch vụ tìm kiếm khi bật tra cứu web. Không ghi nội dung vào log hoặc database của ứng dụng; nhà cung cấp có chính sách xử lý dữ liệu riêng. Tra cứu web cần kiểm tra quyền/chi phí rồi bật riêng theo GROQ_SETUP.md.
-- Hội thoại lưu cục bộ theo tài khoản, có lịch sử/xóa có xác nhận; không tự đồng bộ sang thiết bị khác. Giới hạn 30 yêu cầu/người/ngày UTC, mỗi lượt tối đa 12 tin. Lượt lỗi từ nhà cung cấp vẫn tính quota.
-- Xóa tài khoản cần session hợp lệ và xác nhận `delete`. Hệ thống giữ dữ liệu 7 ngày; chỉ xác nhận khôi phục trước hạn mới hủy yêu cầu. Worker xóa Auth user rồi cascade sau hạn.
-- Dự án hiện không có luồng lưu file Storage người dùng. Nếu bổ sung Storage, cần bổ sung chính sách xóa file trước khi quảng bá xóa toàn bộ dữ liệu; Supabase có thể chặn xóa user còn sở hữu file.
+- Bật **Lịch của tôi** để gửi phần lịch liên quan của chính tài khoản cho Groq.
+  Tắt tùy chọn này thì không đọc dữ liệu lịch làm ngữ cảnh.
+- AI chỉ trả đề xuất. Người dùng bấm **Áp dụng** từng mục; RPC kiểm tra chủ sở
+  hữu và chống áp dụng lặp cùng request ID. Xóa chuỗi lặp phải được trình bày rõ.
+- Mỗi yêu cầu chat dùng ngữ cảnh có giới hạn, không phải bộ nhớ vô hạn. Ảnh
+  trong chat tối đa 3 MB, không lưu ảnh vào lịch sử.
+- Lịch sử chat, công việc, phiên tự học, nhật ký và mục tiêu đồng bộ theo tài
+  khoản; dữ liệu ngoại tuyến có hàng đợi. Xem `WORKSPACE_SYNC.md` về xung đột.
+- Hạn mức ứng dụng: 30 yêu cầu/tài khoản/ngày máy chủ, kiểm tra trong SQL. Lượt
+  lỗi từ nhà cung cấp sau khi lấy quota vẫn tính lượt. Hạn mức Groq độc lập.
+- Bộ tự xếp lịch xét hạn nộp, độ khó và lịch bận trong 14 ngày; tối đa 50 phút
+  mỗi phiên, nghỉ 10 phút. Người dùng xem trước và xác nhận lưu.
+- Android có thông báo/báo thức theo quyền hệ điều hành; web/Windows có danh
+  sách thông báo trong app, chưa có báo thức nền. Mở Nhắc nhở để cập nhật lịch
+  báo sau khi sửa lịch. Kiểm tra trên thiết bị thật trước khi demo.
+- Xóa tài khoản cần xác nhận `delete`, chờ 7 ngày và khôi phục có xác nhận;
+  không dùng luồng OTP cũ. Worker/Cron cần cấu hình riêng.
 
-## Kiểm thử staging trước khi dùng thật
+## Kiểm tra
 
-- AI: không đăng nhập → 401; thiếu cấu hình → 503; vượt quota → 429; phản hồi AI không sửa lịch.
-- Tài khoản: thiếu JWT hoặc nhập sai `delete` không tạo yêu cầu; không chấp nhận ID của người khác; chưa xác nhận khôi phục thì không vào app.
-- Dùng tài khoản thử để kiểm tra thời gian chờ, khôi phục, worker và cascade theo `ACCOUNT_DELETION_SETUP.md`.
-- Không kiểm thử xóa bằng tài khoản thật. Chưa triển khai hoặc kiểm thử với Supabase production trong thay đổi này.
+```powershell
+flutter test
+node --test backend/tests/study_assistant_groq.test.mjs
+.\backend\tests\check_groq_parser_test.ps1
+```
 
-Tài liệu: https://developers.openai.com/api/docs/guides/text ; https://supabase.com/docs/reference/javascript/auth-admin-deleteuser
+Các lệnh trên dùng dữ liệu giả. Script `*_db_test.ps1` và `*_live_check.py`
+trong `tests/` kết nối project Supabase đã liên kết; chỉ chạy khi hiểu môi
+trường đích. Script database dùng giao dịch hoàn tác; script Auth dùng tài
+khoản tạm và tự dọn. Không thay bằng tài khoản thật để thử xóa.
 
-## Nhập ảnh/PDF và phần học tập (04/11/2026)
-
-- Đặt thêm secret `OPENAI_VISION_MODEL` là model hỗ trợ ảnh, PDF và Structured Outputs rồi chạy `.\backend\deploy.ps1 -ProjectRef MA_PROJECT_CUA_BAN -Functions import-timetable`. Hàm này xác thực JWT bằng getUser, dùng chung quota và chỉ nhận file tối đa 5 MB. Không ghi file vào Storage. Mỗi lần đọc tối đa 50 buổi.
-- Nút + ở Lịch cho chọn Lịch học / Lịch thi / Tự học / Nhập ảnh-PDF. Kết quả nhận dạng phải kiểm tra từng buổi trước khi lưu. Ngày hoặc giờ không rõ cần người dùng thiết lập; hiện chưa tự quy đổi số tiết theo trường. Import lại cùng file có thể trùng lịch, cần kiểm tra trước khi lưu.
-- Công việc, phiên tự học, mục tiêu và nhật ký tập trung lưu riêng theo user trên thiết bị, chưa đồng bộ Supabase. Thuật toán xếp lịch dùng deadline gần trước, độ khó phá hòa, không trùng lịch học/thi tải từ Supabase, 50 phút/phiên, nghỉ 10 phút giữa các phiên mới, phạm vi 14 ngày. Không phải CP-SAT và không khẳng định tối ưu toàn cục.
-- Thống kê Tự học dùng tuần hiện tại và thời gian được ghi nhận, không tự coi lịch đã qua là đã học. Cảnh báo dựa trên khối lượng công việc so với mục tiêu tuần, chưa phải mô hình dự báo ML.
-- Báo thức Android dùng kênh âm báo riêng, cần quyền thông báo và quyền báo thức chính xác. Thử trên thiết bị thật (bao gồm khóa màn hình và khởi động lại); không chạy thử âm tự động. Lịch nhắc được cập nhật khi mở màn Nhắc nhở. Android có thể chịu hạn chế pin/DND của thiết bị. iOS dùng thông báo âm thanh thông thường; web/Windows chưa có báo thức nền.
-- Chưa triển khai backend production hoặc kiểm thử âm thanh trên phần cứng trong thay đổi này.
+Để dựng lại từ GitHub sau khi xóa bản trên máy, xem
+`../docs/KHOI_PHUC_DU_AN.md`.

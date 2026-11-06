@@ -41,6 +41,7 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 /android/.kotlin/
+/android/build/
 
 # Local deployment state and generated demo packages
 /.wrangler/
@@ -56,3 +57,9 @@ app.*.map.json
 *.jks
 *.keystore
 /android/local.properties
+
+# One-off diagnostics and Python cache
+/analyze_full.txt
+/probe_out.txt
+/backup_pre_fix/
+__pycache__/

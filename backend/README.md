@@ -12,16 +12,17 @@ Mã máy chủ nằm trong `backend/functions/`. Tên dịch vụ vẫn là Supa
 - `deploy.ps1`: triển khai từ thư mục backend bằng Supabase CLI.
 - `tests/study_assistant_groq.test.mjs`: kiểm tra backend giả lập.
 - `GROQ_SETUP.md`: tạo key, kiểm tra Free Plan và thử trợ lý tư vấn.
-- `GEMINI_SETUP.md`: tài liệu cũ, không dùng cho trợ lý hiện tại.
 - `ASSISTANT_SETUP.md`: cấu hình các chức năng AI và học tập.
 - `ACCOUNT_DELETION_SETUP.md`: thời gian chờ, worker, Vault và Cron.
 - `DATABASE_CHECKS.md`: truy vấn kiểm tra dữ liệu và kiểm thử SQL trên staging.
+- `WORKSPACE_SYNC.md`: đồng bộ công việc/chat, chuyển dữ liệu cũ và giới hạn xử lý xung đột.
+- `../docs/KHOI_PHUC_DU_AN.md`: tải lại repo, dựng app và đăng nhập lại công cụ triển khai.
 
 ## Database
 
 ### Đồng bộ trang chủ, môn học và lịch
 
-File SQL chính có khối `APP_DATA_SYNC` ở cuối. Database đang có có thể chọn
+File SQL chính có khối `APP_DATA_SYNC`. Database đang có có thể chọn
 nguyên khối BEGIN..COMMIT đó để áp dụng: chỉ giữ khóa ngoại tổng hợp theo chủ
 sở hữu cho lịch → môn, bỏ khóa ngoại đơn trùng lặp gây mơ hồ khi nhúng quan hệ
 trong Supabase. Khối này cũng tạo hồ sơ theo tên đăng ký cho tài khoản mới và
@@ -35,10 +36,10 @@ yêu cầu tải cũ không được ghi đè kết quả mới hơn. Dữ liệ
 như một lịch trống. Đây chưa phải cơ chế đồng bộ realtime giữa các thiết bị.
 
 Thống kê nằm trong Quản lý trên trang chủ. Tab Chat AI và nút robot mở cùng
-một trạng thái hội thoại/lịch sử trên thiết bị theo tài khoản, không tạo hai
-bản chat. Khi người dùng bật "Lịch của tôi" và hỏi về lịch, study-assistant
+một trạng thái hội thoại/lịch sử theo tài khoản, không tạo hai
+bản chat. Lịch sử đồng bộ qua Supabase theo WORKSPACE_SYNC.md. Khi người dùng bật "Lịch của tôi" và hỏi về lịch, study-assistant
 chỉ đọc các mục liên quan thuộc tài khoản đã xác thực qua RLS rồi gửi cho Groq;
-AI không thể sửa/xóa lịch. Lịch lặp được kiểm tra theo ngày diễn ra thực tế;
+AI chuẩn bị đề xuất tạo/xóa; chỉ khi người dùng bấm Áp dụng thì RPC mới lưu thao tác theo quyền của tài khoản. Lịch lặp được kiểm tra theo ngày diễn ra thực tế;
 ngữ cảnh gồm buổi tiếp theo trong 90 ngày tới và lịch thi sắp tới trong cùng
 khoảng thời gian.
 
@@ -48,7 +49,8 @@ còn thiếu trong file chính; không chạy riêng đoạn giữa BEGIN/COMMIT
 Không chạy các định nghĩa cũ ở đầu file sau các bản mới ở cuối file.
 
 Các phần đáng chú ý: ASSISTANT_QUOTA, ACCOUNT_CASCADE_AUDIT,
-ACCOUNT_DELETION_GRACE, DATABASE_HARDENING và OPTIONAL_ACCOUNT_PURGE_CRON.
+ACCOUNT_DELETION_GRACE, DATABASE_HARDENING, AI_CALENDAR_ACTIONS, ACCOUNT_RESTORE_HINT,
+WORKSPACE_CLOUD_SYNC, CALENDAR_EXAM_CREATE_FIX và OPTIONAL_ACCOUNT_PURGE_CRON.
 Hardening giữ nguyên dữ liệu cũ; CHECK/FK NOT VALID vẫn kiểm tra dữ liệu khi
 INSERT/UPDATE. Đọc mục hardening_preflight trong DATABASE_CHECKS.md trước khi
 cập nhật. Không tự sửa hoặc xóa dữ liệu không hợp lệ.

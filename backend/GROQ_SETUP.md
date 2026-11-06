@@ -13,9 +13,8 @@ thay nhà cung cấp không thay schema hay quota 30 lượt/người/ngày.
 3. Vào API Keys: https://console.groq.com/keys, chọn Create API Key, đặt tên và
    sao chép key. Không gửi key vào chat hay lưu trong Flutter/SQL/Git.
 4. Mở Limits của tài khoản để kiểm tra model `openai/gpt-oss-120b` có quyền dùng.
-   Tài liệu hiện liệt kê Free Plan: 30 yêu cầu/phút, 1.000 yêu cầu/ngày,
-   8.000 token/phút, 200.000 token/ngày. Đây là hạn mức dùng chung theo tổ chức;
-   Limits của tài khoản mới là giá trị thực tế, không bảo đảm mọi tài khoản giống nhau.
+   Hạn mức thực tế phụ thuộc model và tổ chức; xem Limits trong tài khoản thay
+   vì dựa vào một con số cố định trong tài liệu dự án.
 5. Từ terminal tại thư mục gốc, chạy trước khi đặt key lên Supabase:
 
 ```powershell
@@ -42,7 +41,7 @@ Supabase Dashboard → đúng project của app → Edge Functions → Secrets:
 | GROQ_MODEL | openai/gpt-oss-120b |
 
 Có thể đổi model thành `openai/gpt-oss-20b` nếu tài khoản cho dùng; backend giới
-hạn vào hai model GPT-OSS này để giữ đúng khả năng reasoning/browser search.
+hạn vào hai model GPT-OSS này cho câu trả lời văn bản. Tra cứu web đã bị bỏ.
 Các secret Gemini cũ không còn được trợ lý đọc. Thu hồi key Gemini từng bị lộ.
 
 Mở Edge Functions → study-assistant → Code, thay toàn bộ index.ts bằng file
@@ -65,8 +64,8 @@ Tư vấn thông thường không bật công cụ ngoài, dùng model trong h�
 Trợ lý được chỉ dẫn hỏi khi thiếu dữ kiện, phân biệt suy luận/đề xuất, không bịa
 nguồn hoặc quy định và không bảo đảm trả lời chính xác tuyệt đối. Khi người dùng
 bật "Lịch của tôi" và hỏi về lịch, Edge Function chỉ đọc các mục liên quan thuộc
-tài khoản đã xác thực qua RLS rồi gửi phần đó cho Groq. AI không được cấp quyền
-sửa/xóa lịch. Lịch lặp được kiểm tra theo ngày diễn ra thực tế; ngữ cảnh gồm
+tài khoản đã xác thực qua RLS rồi gửi phần đó cho Groq. AI chỉ chuẩn bị đề xuất tạo/xóa lịch; người dùng phải bấm Áp dụng, rồi RPC
+kiểm tra quyền sở hữu trước khi ghi dữ liệu. Lịch lặp được kiểm tra theo ngày diễn ra thực tế; ngữ cảnh gồm
 buổi tiếp theo trong 90 ngày tới và lịch thi sắp tới trong cùng khoảng thời gian.
 Người dùng có thể tắt tùy chọn này bất cứ lúc nào.
 
@@ -88,8 +87,8 @@ diễn ra thực tế trong khoảng đang hỏi. Không truy cập dữ liệu 
 
 Với chat dài, ngoài các lượt gần nhất, app gửi bổ sung lời nhắn cũ của chính
 người dùng (tối đa 40 mục / 8.000 ký tự JSON), không lấy câu trả lời cũ của AI
-làm dữ kiện. Đây vẫn là ngữ cảnh có giới hạn, không phải bộ nhớ vô hạn hay lịch
-sử đồng bộ giữa thiết bị. Yêu cầu mới nhất được ưu tiên khi thay đổi kế hoạch.
+làm dữ kiện. Đây vẫn là ngữ cảnh có giới hạn, không phải bộ nhớ vô hạn. Lịch sử giữa
+thiết bị được đồng bộ riêng qua Supabase theo WORKSPACE_SYNC.md. Yêu cầu mới nhất được ưu tiên khi thay đổi kế hoạch.
 
 Khi được nhờ lập kế hoạch, AI được hướng dẫn đề xuất môn có thật và cách chia
 giờ, ghi rõ giả định để người dùng kiểm tra, không hỏi lại dữ kiện đã có.
@@ -102,7 +101,7 @@ Xóa lịch lặp sẽ ghi rõ là xóa toàn bộ chuỗi. Tạo mới hiện l
 tối đa 20 mục/lần; thiếu ngày, giờ hoặc phòng thì trợ lý phải hỏi lại.
 
 Ảnh PNG/JPEG/WebP tối đa 3 MB: chọn từ nút ảnh hoặc dán Ctrl+V trên trình duyệt.
-Ảnh chỉ gửi trong lượt hiện tại, không ghi vào lịch sử cục bộ; không bật tra cứu
+Ảnh chỉ gửi trong lượt hiện tại, không ghi vào lịch sử chat; không bật tra cứu
 web cùng lượt ảnh. Dán ảnh clipboard hiện dành cho web; ứng dụng native chọn
 ảnh từ bộ chọn tệp. Vision dùng `GROQ_VISION_MODEL`, mặc định `qwen/qwen3.8-27b`;
 tài khoản Groq cần có quyền/hạn mức model này. Tham khảo
@@ -129,8 +128,8 @@ nhật bản Flutter Web lên Cloudflare. Xóa dữ liệu trình duyệt trư�
 | Groq key rejected | Key bị thu hồi, sai hoặc tài khoản chưa được cấp quyền |
 | Groq model unavailable | Tên model và quyền của tổ chức |
 | Groq rate limit reached | Limits, độ dài hội thoại, chờ theo hạn mức; không gửi liên tục |
-| Groq request rejected | Quyền dùng browser_search, định dạng/tham số và model |
-| Web search unavailable | Chưa bật điều kiện máy chủ cho tra cứu; có thể tắt nút để tư vấn |
+| Groq request rejected | Định dạng, tham số, model và quyền API của tài khoản |
+| Web search unavailable | Bản cũ yêu cầu tra cứu web; cập nhật app, chức năng này đã bị bỏ |
 | Daily limit reached | 30 lượt/ngày của app, đổi ngày lúc 07:00 Việt Nam |
 | Groq response unavailable | Nội dung bị chặn hoặc bị cắt; thử câu hỏi ngắn hơn |
 
@@ -141,7 +140,7 @@ consume_assistant_request/account_is_active trong SQL chính.
 
 ## Kiểm thử cục bộ
 
-Chatbox giữ toàn bộ hội thoại trong lịch sử cục bộ theo tài khoản. Mỗi lần gửi,
+Chatbox lưu hội thoại theo tài khoản và đồng bộ qua Supabase, có bản lưu trên thiết bị. Mỗi lần gửi,
 app chọn các lượt trao đổi gần nhất (tối đa 12 tin, nằm trong giới hạn JSON của
 máy chủ), bắt đầu từ câu hỏi của người dùng. Hội thoại quá dài không được gửi
 toàn bộ; hãy nhắc lại chi tiết quan trọng nếu AI cần. Có thể tìm lịch sử theo
@@ -149,8 +148,7 @@ tiêu đề hoặc nội dung, mở lại để hỏi tiếp và sao chép câu 
 
 Sau khi cập nhật chỉ dẫn trả lời trong `functions/study-assistant/index.ts`,
 triển khai lại hàm `study-assistant` bằng hướng dẫn triển khai của backend.
-Tra cứu web vẫn cần `GROQ_ENABLE_SEARCH=true` và quyền công cụ phù hợp của Groq;
-không bật biến này nếu chưa kiểm tra điều kiện và chi phí trong tài khoản.
+Tra cứu web đã bị chặn trong mã; không cần đặt GROQ_ENABLE_SEARCH hoặc key Exa.
 
 ```powershell
 node --test backend/tests/study_assistant_groq.test.mjs
@@ -158,12 +156,10 @@ node --test backend/tests/study_assistant_groq.test.mjs
 flutter test test/assistant_overlay_test.dart test/services/assistant_error_test.dart
 ```
 
-Các kiểm thử trên dùng dữ liệu giả, không gọi Groq thật. Chưa có key Groq và chưa
-triển khai Supabase trong phiên chuyển đổi này. Bước kiểm tra trực tiếp ở mục 1
-cần chạy bằng tài khoản của người vận hành.
+Các kiểm thử trên dùng dữ liệu giả, không gọi Groq thật. Kiểm tra trực tiếp ở
+mục 1 cần key của người vận hành; không gửi key vào log hoặc Git.
 
 Tài liệu chính thức:
 - https://console.groq.com/docs/models
 - https://console.groq.com/docs/rate-limits
-- https://console.groq.com/docs/tool-use/built-in-tools/browser-search
 - https://console.groq.com/docs/your-data
