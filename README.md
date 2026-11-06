@@ -9,6 +9,8 @@
 - [Công nghệ](#công-nghệ)
 - [Cấu trúc dự án](#cấu-trúc-dự-án)
 - [Dữ liệu và cách ứng dụng hoạt động](#dữ-liệu-và-cách-ứng-dụng-hoạt-động)
+- [Tải và cài ứng dụng](#tải-và-cài-ứng-dụng)
+- [Tải lại dự án từ GitHub](docs/KHOI_PHUC_DU_AN.md)
 - [Yêu cầu và cài đặt](#yêu-cầu-và-cài-đặt)
 - [Cấu hình Supabase](#cấu-hình-supabase)
 - [Nhập lịch từ CSV](#nhập-lịch-từ-csv)
@@ -57,7 +59,17 @@
 - Cấu hình nhắc cho lịch học/lịch kiểm tra; các mốc nhắc gồm 5, 10, 15, 30, 60 và 120 phút trước sự kiện.
 - Tùy chọn giao diện sáng/tối được lưu trên thiết bị.
 - Xem thống kê số buổi và tổng thời lượng theo tuần hoặc tháng, gồm phân tích theo môn và theo ngày. Lịch lặp được tính theo những ngày thực sự diễn ra trong khoảng thống kê.
-- Trợ lý AI có thể đọc các mục lịch liên quan khi người dùng bật tùy chọn **Lịch của tôi**; dữ liệu chỉ đọc, được giới hạn theo tài khoản và gửi tới Groq để trả lời. Lịch lặp được tính theo lần diễn ra tiếp theo trong 90 ngày tới.
+- Trợ lý AI đọc lịch khi bật **Lịch của tôi**, trả lời qua Groq và chuẩn bị đề xuất tạo/xóa lịch; người dùng phải kiểm tra rồi bấm **Áp dụng** từng mục. Không có tra cứu web.
+- Chuông thông báo hiển thị nhắc nhở đến hạn và lịch sắp tới trong 7 ngày; hỗ trợ đánh dấu đã đọc. Trạng thái đọc lưu trên từng thiết bị.
+
+### Công việc, tự học và đồng bộ
+
+- Công việc có hạn nộp, thời lượng, độ khó, trạng thái hoàn thành và liên kết với môn học; có bộ lọc theo môn.
+- Tự xếp lịch trong 14 ngày, xét lịch học/thi và hạn nộp; phiên tối đa 50 phút, nghỉ 10 phút; xem trước rồi xác nhận lưu.
+- Ghi nhận thời gian thực học bằng chế độ Tập trung.
+- Công việc, phiên học, nhật ký, mục tiêu và lịch sử chat đồng bộ theo tài khoản Supabase; có hàng đợi lưu trên máy khi mất mạng.
+- Bấm **Đồng bộ** trong Công việc hoặc mở **Lịch sử** trong Chat AI để tải dữ liệu mới và gửi lại thay đổi còn chờ. Nếu cùng sửa một mục ở hai máy, bản máy chủ nhận sau cùng được giữ.
+- Nhập ảnh trong chat dùng Groq vision nếu tài khoản/model hỗ trợ; nhập ảnh/PDF từ menu lịch dùng Edge Function riêng, hiện cần cấu hình OpenAI.
 
 ## Luồng sử dụng
 
@@ -104,10 +116,12 @@ test/                  # Kiểm thử widget, model, service và luồng giao di
 | `lib/screen/view_schedule_screen.dart` | Lịch tổng hợp theo ngày/tháng/năm |
 | `lib/screen/lesson_editor.dart` | Form tạo/sửa lịch, ghi chú, nhãn và lịch lặp |
 | `lib/screen/subject_management_screen.dart` | Quản lý môn học và lịch lặp theo nhóm |
-| `lib/screen/schedule_management_screen.dart` | Danh sách thời khóa biểu/lịch kiểm tra và kiểm tra xung đột |
 | `lib/screen/schedule_announcement.dart` | Thiết lập thông báo nhắc lịch |
 | `lib/screen/statistical.dart` | Thống kê theo tuần/tháng |
 | `lib/screen/settings.dart` | Cài đặt, giao diện và nhập lịch CSV |
+| `lib/screen/tasks_screen.dart` | Công việc, môn học liên kết, tự xếp lịch và tập trung |
+| `lib/widgets/assistant_overlay.dart` | Chat AI và trợ lý mini dùng chung lịch sử |
+| `lib/services/workspace_sync.dart` | Đồng bộ từng mục, lưu ngoại tuyến và đánh dấu xóa |
 | `lib/services/home_service.dart` | Đọc và tổng hợp dữ liệu Supabase cho trang chủ |
 | `lib/models/schedule_recurrence.dart` | Quy tắc ngày diễn ra dùng chung giữa lịch, trang chủ và thống kê |
 
@@ -123,6 +137,10 @@ test/                  # Kiểm thử widget, model, service và luồng giao di
 | `schedule_exams` | Lịch kiểm tra theo ngày cụ thể, kèm thời gian, phòng và giám thị |
 | `reminders` | Cài đặt nhắc, thời điểm nhắc và loại sự kiện (lịch học hoặc lịch kiểm tra) |
 | `calendar_categories` | Tên và màu nhãn do từng tài khoản quản lý |
+| `workspace_items` | Công việc, phiên học, nhật ký, mục tiêu và lịch sử chat theo tài khoản |
+| `assistant_daily_usage` | Hạn mức AI được kiểm tra trên máy chủ |
+| `account_deletion_requests` | Yêu cầu xóa tài khoản và thời hạn khôi phục |
+| `assistant_calendar_actions` | Chống áp dụng lặp cùng một thao tác AI |
 
 Môn học liên kết với lịch học và lịch kiểm tra qua `subject_id`. Những bản ghi cá nhân có `user_id` được giới hạn bằng chính sách RLS; các màn hình lấy dữ liệu theo tài khoản đang đăng nhập. Hàm SQL như `save_subject_schedule`, `save_calendar_lesson` và `delete_calendar_subject` xử lý các thao tác cần cập nhật nhiều bản ghi cùng nhau.
 
@@ -132,7 +150,18 @@ Môn học liên kết với lịch học và lịch kiểm tra qua `subject_id`
 
 Lịch học theo tuần cũ lưu các ngày đã chọn trong `day_of_week`. Lịch lặp mới dùng thêm `recurrence` với các giá trị `none`, `daily`, `weekly`, `monthly` hoặc `yearly`; `end_date` để trống biểu thị không đặt ngày kết thúc. Quy tắc lặp được dùng chung khi dựng lịch, tính sự kiện trang chủ và tổng hợp thống kê.
 
+## Tải và cài ứng dụng
+
+Tải bản phát hành mới nhất từ [GitHub Releases](https://github.com/Chilliess/Ungdungquanlylichhoc/releases/latest):
+
+- **Android:** tải `QuanLyLichHoc-Android.apk`, mở tệp trên điện thoại và cho phép cài ứng dụng từ nguồn này nếu Android yêu cầu. Đây là APK cài trực tiếp, chưa được phát hành trên Google Play.
+- **Windows x64:** tải `QuanLyLichHoc-Windows-x64.zip`, giải nén toàn bộ vào một thư mục rồi chạy `QuanLyLichHoc.exe`. Giữ các tệp DLL và thư mục `data` cạnh tệp EXE.
+
+Đăng nhập bằng tài khoản ứng dụng để sử dụng dữ liệu đã lưu. Các bản cài chỉ được đăng tại trang Releases sau khi chủ dự án tạo GitHub Release và đính kèm tệp cài đặt.
+
 ## Yêu cầu và cài đặt
+
+Nếu tải lại sau khi xóa bản trên máy, làm theo **[hướng dẫn khôi phục dự án](docs/KHOI_PHUC_DU_AN.md)**. Tài liệu nêu môi trường đã kiểm tra, lệnh build và những dữ liệu/khóa cần giữ ngoài Git.
 
 - Flutter SDK có Dart tương thích với ràng buộc trong `pubspec.yaml` (`^3.5.4` trở lên).
 - Git và một project Supabase.
@@ -228,7 +257,7 @@ flutter analyze
 ```
 ## Lưu ý
 
-- Thông báo cục bộ và quyền thông báo phụ thuộc nền tảng, quyền của hệ điều hành và cấu hình thiết bị.
+- Thông báo nền/báo thức hiện hỗ trợ Android; web/Windows có danh sách thông báo trong app. Sau khi thay đổi lịch, mở Nhắc nhở và làm mới để cập nhật lịch nhắc trên thiết bị.
 - Google/Microsoft OAuth cần được bật và cấu hình trong Supabase trước khi sử dụng.
 - Khi thêm hoặc nâng cấp chức năng Supabase, cần cập nhật schema tương ứng bằng SQL tổng cho database mới hoặc migration cho database hiện có.
 
