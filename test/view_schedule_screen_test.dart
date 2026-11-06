@@ -115,6 +115,7 @@ void main() {
         findsOneWidget);
     expect(
         find.byKey(const ValueKey('lesson-detail-category')), findsOneWidget);
+    expect(find.byKey(const ValueKey('lesson-delete')), findsOneWidget);
     expect(find.text('Nhãn: '), findsNothing);
     expect(find.text('Giảng viên: '), findsNothing);
     final badge =

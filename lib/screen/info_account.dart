@@ -284,8 +284,8 @@ class _AccountScreenState extends State<AccountScreen> {
                                                           .visibility_outlined))),
                                           validator: (value) => value != null &&
                                                   value.isNotEmpty &&
-                                                  value.length < 6
-                                              ? 'Mật khẩu mới phải có ít nhất 6 ký tự'
+                                                  value.length < 8
+                                              ? 'Mật khẩu mới phải có ít nhất 8 ký tự'
                                               : null)
                                     ],
                                   )),

@@ -300,8 +300,8 @@ class _SigninscreenState extends State<Signinscreen> {
                           if (password.isEmpty) {
                             return 'Vui lòng nhập mật khẩu';
                           }
-                          if (password.length < 6) {
-                            return 'Mật khẩu tối thiểu 6 ký tự';
+                          if (password.length < 8) {
+                            return 'Mật khẩu tối thiểu 8 ký tự';
                           }
                           return null;
                         },

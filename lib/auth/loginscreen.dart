@@ -46,7 +46,7 @@ class _LoginscreenState extends State<Loginscreen> {
 
   Future<void> _login() async {
     final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+    final password = _passwordController.text;
 
     if (email.isEmpty || password.isEmpty) {
       _showSnackBar('Vui lòng điền đầy đủ thông tin!');

@@ -2,6 +2,7 @@ import '../services/calendar_conflicts.dart';
 import '../services/study_data.dart';
 import 'package:untitled/widgets/app_notice.dart';
 import '../models/schedule_recurrence.dart';
+import 'confirm_action.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -68,6 +69,7 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
     _selectedDate = widget.initialDate ?? DateTime.now();
     _browseDate = _selectedDate;
     _eventController = EventController<Map<String, dynamic>>();
+    studyDataRevision.addListener(_onStudyDataChanged);
     _loadDataFromSupabase();
     if (widget.openEditorOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -78,6 +80,7 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
 
   @override
   void dispose() {
+    studyDataRevision.removeListener(_onStudyDataChanged);
     _viewTransition.dispose();
     _eventController.dispose();
     _categoryStore.dispose();
@@ -97,14 +100,14 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
   }
 
   Future<void> _loadDataFromSupabase() async {
-    await learningStore.load();
     final version = ++_loadVersion;
-    setState(() => _isLoading = true);
+    if (mounted) setState(() => _isLoading = true);
 
     try {
+      await learningStore.load();
+      if (!mounted || version != _loadVersion) return;
       final userId = supabase.auth.currentUser?.id;
       if (userId == null) {
-        setState(() => _isLoading = false);
         return;
       }
 
@@ -140,10 +143,72 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
             const SnackBar(
                 content: Text('Không tải được lịch. Vui lòng thử lại.')));
       }
+    } finally {
+      if (mounted && version == _loadVersion) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _onStudyDataChanged() {
+    if (mounted) _loadDataFromSupabase();
+  }
+
+  Future<void> _deleteEvent(
+      CalendarEventData<Map<String, dynamic>> event) async {
+    final item = event.event;
+    final id = item?['id']?.toString();
+    if (id == null) return;
+    final isExam = item?['is_exam'] == true;
+    final recurring = !isExam &&
+        ScheduleRecurrence.frequency(item ?? const {}) != 'none';
+    final confirmed = await confirmAction(
+      context,
+      deleting: true,
+      message: recurring
+          ? 'Xóa toàn bộ chuỗi lịch lặp này, bao gồm cả các buổi đã qua?'
+          : 'Xóa lịch ${isExam ? 'kiểm tra' : 'học'} này?',
+    );
+    if (!confirmed || !mounted) return;
+
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) {
+      AppNotice.show(
+          context,
+          const SnackBar(
+              content: Text('Vui lòng đăng nhập lại để xóa lịch.')));
+      return;
     }
 
-    if (mounted && version == _loadVersion) {
-      setState(() => _isLoading = false);
+    try {
+      final table = isExam ? 'schedule_exams' : 'schedules';
+      final deleted = await supabase
+          .from(table)
+          .delete()
+          .eq('id', id)
+          .eq('user_id', userId)
+          .select('id');
+      if (!mounted) return;
+      if (deleted.isEmpty) {
+        AppNotice.show(
+            context,
+            const SnackBar(
+                content: Text('Không tìm thấy lịch hoặc lịch đã bị xóa.')));
+        return;
+      }
+      studyDataChanged();
+      AppNotice.show(
+          context,
+          SnackBar(
+              content:
+                  Text('Đã xóa ${isExam ? 'lịch kiểm tra' : 'lịch học'}.')));
+    } catch (_) {
+      if (mounted) {
+        AppNotice.show(
+            context,
+            const SnackBar(
+                content: Text('Không xóa được lịch. Vui lòng thử lại.')));
+      }
     }
   }
 
@@ -534,6 +599,17 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
           ],
         )),
         actions: [
+          TextButton.icon(
+            key: const ValueKey('lesson-delete'),
+            onPressed: item?['id'] == null
+                ? null
+                : () {
+                    Navigator.pop(context);
+                    _deleteEvent(event);
+                  },
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Xóa'),
+          ),
           TextButton.icon(
             key: const ValueKey('lesson-edit'),
             onPressed: item?['id'] == null
