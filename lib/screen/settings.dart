@@ -1,4 +1,5 @@
 import '../services/study_data.dart';
+import '../services/csv_delimiter.dart';
 import 'package:untitled/widgets/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -100,8 +101,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         csvString = String.fromCharCodes(file.bytes!);
       }
 
-      // 2. Tự động nhận diện dấu phân cách (dấu phẩy , hoặc dấu chấm phẩy ;)
-      String delimiter = csvString.contains(';') ? ';' : ',';
+      // 2. Nhận diện dấu phân cách từ dòng tiêu đề, bỏ qua nội dung trong dấu ngoặc kép.
+      final delimiter = detectCsvDelimiter(csvString);
 
       List<List<dynamic>> rows = CsvToListConverter(
         fieldDelimiter: delimiter,

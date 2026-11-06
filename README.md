@@ -1,6 +1,6 @@
 # Ứng Dụng Quản Lý Lịch Học & Thời Khóa Biểu
 
-Ứng dụng Flutter hỗ trợ sinh viên quản lý môn học, thời khóa biểu, lịch kiểm tra và thời gian tự học. Ứng dụng dùng Supabase để xác thực tài khoản và lưu dữ liệu; lịch được tổng hợp theo ngày, có thể xem theo ngày/tháng/năm, tìm kiếm, phân loại và đặt nhắc nhở.
+Ứng dụng Flutter hỗ trợ sinh viên quản lý môn học, thời khóa biểu, lịch kiểm tra và thời gian tự học. Các bản chạy/thử nghiệm hiện có cho web, Android và Windows; mã nguồn Linux/macOS chưa được xác nhận là nền tảng hỗ trợ. Ứng dụng dùng Supabase để xác thực tài khoản và lưu dữ liệu; lịch được tổng hợp theo ngày, có thể xem theo ngày/tháng/năm, tìm kiếm, phân loại và đặt nhắc nhở.
 
 ## Mục lục
 
@@ -26,6 +26,7 @@
 - Đăng nhập và đăng ký bằng Google hoặc Microsoft qua Supabase OAuth sau khi cấu hình provider.
 - Cập nhật tên hiển thị và đổi mật khẩu trong màn hình tài khoản.
 - Gửi email khôi phục mật khẩu qua Supabase Auth.
+- Yêu cầu xóa tài khoản sau thời gian chờ 7 ngày; có thể đăng nhập và xác nhận khôi phục trong thời gian chờ. Xóa vĩnh viễn cần cấu hình tác vụ máy chủ theo hướng dẫn backend.
 - Nếu project bật xác nhận email, người dùng cần xác minh email trước khi đăng nhập.
 - Google và Microsoft dùng OAuth của Supabase; xem hướng dẫn cấu hình bên dưới.
 
@@ -82,24 +83,24 @@
 
 - **Ứng dụng:** Flutter, Dart, Material.
 - **Xác thực và dữ liệu:** Supabase Auth, PostgreSQL, Row Level Security (RLS).
-- **Lịch và tiện ích:** `calendar_view`, `intl`, `flutter_local_notifications`, `timezone`, `shared_preferences`, `file_picker` và `csv`.
+- **Lịch và tiện ích:** `calendar_view`, `intl`, `flutter_local_notifications`, `timezone`, `shared_preferences`, `file_picker`, `csv`, `app_links` và `font_awesome_flutter`.
 
 ## Cấu trúc dự án
 
 ```text
 lib/
-├── auth/       # Đăng nhập, đăng ký, khôi phục mật khẩu và thành phần xác thực
-├── models/     # Mô hình dữ liệu trang chủ, quy tắc lịch lặp, thống kê
-├── screen/     # Các màn hình lịch, môn học, tài khoản, cài đặt, nhắc nhở
-├── services/   # Tải và tổng hợp dữ liệu trang chủ
+├── auth/       # Đăng nhập, đăng ký, OAuth và khôi phục mật khẩu
+├── models/     # Mô hình lịch, thông báo, thống kê và dữ liệu trang chủ
+├── screen/     # Màn hình lịch, môn học, tài khoản, công việc, cài đặt
+├── services/   # Supabase, đồng bộ, dữ liệu, tùy chọn và xử lý lịch
 ├── splash/     # Khởi động và kiểm tra phiên đăng nhập
-├── theme/      # Màu sắc giao diện
-├── widgets/    # Widget và thông báo dùng chung
+├── theme/      # Màu sắc và chủ đề giao diện
+├── widgets/    # Thành phần giao diện dùng chung, chat và thông báo
 ├── homescreen.dart
 └── main.dart   # Khởi tạo Supabase, ngôn ngữ và chủ đề
 
 backend/
-├── functions/  # Mã máy chủ: Groq, nhập lịch, xóa tài khoản
+├── functions/  # Mã máy chủ: AI, nhập lịch và vòng đời tài khoản
 ├── deploy.ps1  # Triển khai hàm từ thư mục backend
 ├── tests/      # Kiểm tra backend giả lập
 └── README.md   # Hướng dẫn database và cấu hình dịch vụ
@@ -152,18 +153,16 @@ Lịch học theo tuần cũ lưu các ngày đã chọn trong `day_of_week`. L�
 
 ## Tải và cài ứng dụng
 
-## Tải trực tiếp
-
 - **[Tải ứng dụng Android (APK)](https://github.com/Chilliess/Ungdungquanlylichhoc/releases/latest/download/QuanLyLichHoc-Android.apk):** mở tệp trên điện thoại và cho phép cài ứng dụng từ nguồn này nếu Android yêu cầu. Đây là APK cài trực tiếp, chưa được phát hành trên Google Play.
 - **[Tải ứng dụng Windows x64 (ZIP)](https://github.com/Chilliess/Ungdungquanlylichhoc/releases/latest/download/QuanLyLichHoc-Windows-x64.zip):** giải nén toàn bộ vào một thư mục rồi chạy `QuanLyLichHoc.exe`. Giữ các tệp DLL và thư mục `data` cạnh tệp EXE.
 
-Đăng nhập bằng tài khoản ứng dụng để sử dụng dữ liệu đã lưu. Xem [tất cả bản phát hành](https://github.com/Chilliess/Ungdungquanlylichhoc/releases) nếu muốn chọn phiên bản khác.
+Đăng nhập bằng tài khoản ứng dụng để sử dụng dữ liệu đã lưu. Xem [tất cả bản phát hành](https://github.com/Chilliess/Ungdungquanlylichhoc/releases) nếu muốn chọn phiên bản khác. Các bản phát hành hiện được cung cấp trực tiếp, chưa phát hành trên Google Play.
 
 ## Yêu cầu và cài đặt
 
 Nếu tải lại sau khi xóa bản trên máy, làm theo **[hướng dẫn khôi phục dự án](docs/KHOI_PHUC_DU_AN.md)**. Tài liệu nêu môi trường đã kiểm tra, lệnh build và những dữ liệu/khóa cần giữ ngoài Git.
 
-- Flutter SDK có Dart tương thích với ràng buộc trong `pubspec.yaml` (`^3.5.4` trở lên).
+- Flutter SDK có Dart trong khoảng tương thích của `pubspec.yaml` (`>=3.5.4 <4.0.0`, viết gọn là `^3.5.4`).
 - Git và một project Supabase.
 
 Kiểm tra môi trường Flutter:
@@ -205,13 +204,17 @@ Không chạy lại các định nghĩa cũ sau các bản cập nhật ở cu�
 
 Ứng dụng khởi tạo Supabase trong `lib/main.dart`. Cập nhật `url` và `anonKey` bằng Project URL và publishable key (hoặc anon key) của project Supabase bạn vừa tạo, sau đó chạy lại ứng dụng.
 
-Ứng dụng Flutter là client công khai: **không** đặt `service_role` key, database password hoặc secret key trong mã ứng dụng. Kiểm tra RLS trước khi dùng dữ liệu thật; trong SQL tổng hiện tại, các bảng lịch, môn, nhắc và nhãn giới hạn truy cập theo chủ sở hữu, và `profiles` chỉ cho phép người dùng đọc hồ sơ của chính mình. Nếu bật xác nhận email hoặc khôi phục mật khẩu, cấu hình email và URL chuyển hướng tương ứng trong Supabase Auth.
+Ứng dụng Flutter là client công khai: **không** đặt `service_role` key, database password hoặc secret key trong mã ứng dụng. Kiểm tra RLS trước khi dùng dữ liệu thật; SQL hiện tại giới hạn các bảng dữ liệu người dùng (môn, lịch học/thi, nhắc, nhãn và workspace) theo chủ sở hữu, còn `profiles` chỉ cho phép người dùng đọc hồ sơ của chính mình. Nếu bật xác nhận email hoặc khôi phục mật khẩu, cấu hình email và URL chuyển hướng tương ứng trong Supabase Auth.
+
+### Edge Functions và tác vụ máy chủ
+
+Đăng nhập và các luồng dữ liệu lịch cơ bản dùng Supabase Auth, database và SQL ở trên. Trợ lý AI, nhận dạng ảnh/PDF và xóa tài khoản sau thời gian chờ cần triển khai các Edge Functions tương ứng cùng secrets; việc chạy SQL không tự triển khai hàm hoặc bật tác vụ xóa. Xem [backend/README.md](backend/README.md), [hướng dẫn trợ lý](backend/ASSISTANT_SETUP.md) và [hướng dẫn xóa tài khoản](backend/ACCOUNT_DELETION_SETUP.md).
 
 ### Đăng nhập Google và Microsoft
 
 1. Trong Supabase Dashboard, bật Google và Azure (Microsoft) ở **Authentication → Providers** và nhập thông tin OAuth của từng nhà cung cấp.
 2. Thêm URL callback hiển thị trong Supabase vào danh sách redirect URI của Google/Azure.
-3. Thêm `com.example.untitled://login-callback/` vào **Authentication → URL Configuration → Redirect URLs**. Khi đổi Android `applicationId`, cập nhật đồng thời scheme trong `AndroidManifest.xml` và URL này.
+3. Thêm `com.example.untitled://login-callback/` vào **Authentication → URL Configuration → Redirect URLs**. Scheme callback này độc lập với Android `applicationId`; nếu muốn đổi scheme, cập nhật đồng bộ `AndroidManifest.xml`, `lib/services/social_auth.dart`, `windows/runner/main.cpp` và Redirect URLs trên Supabase.
 4. Với bản Windows, ứng dụng tự đăng ký callback `com.example.untitled://login-callback/` cho tài khoản Windows hiện tại. Với bản web, thêm domain triển khai vào danh sách redirect URLs. Callback hiện hỗ trợ Android, Windows và web. Không đưa client secret của Google/Azure vào ứng dụng.
 
 ## Nhập lịch từ CSV
@@ -249,16 +252,19 @@ flutter test
 node --test backend/tests/study_assistant_groq.test.mjs
 ```
 
-Các kiểm thử hiện có bao phủ quy tắc lịch lặp, thống kê, service trang chủ, tài khoản, biên tập lịch, nhãn phân loại và tương tác giao diện.
+Các kiểm thử Flutter bao phủ quy tắc lịch lặp, thống kê, đồng bộ, xác thực, tài khoản, biên tập lịch và tương tác giao diện. Kiểm thử backend trong lệnh trên dùng mô phỏng; các kiểm tra cần Supabase/staging và hướng dẫn chạy riêng được ghi trong [backend/README.md](backend/README.md).
 
 Kiểm tra phân tích mã Dart:
+
 ```bash
 flutter analyze
 ```
+
 ## Lưu ý
 
-- Thông báo nền/báo thức hiện hỗ trợ Android; web/Windows có danh sách thông báo trong app. Sau khi thay đổi lịch, mở Nhắc nhở và làm mới để cập nhật lịch nhắc trên thiết bị.
+- Thông báo cục bộ/báo thức hiện chỉ hỗ trợ Android; web/Windows có danh sách thông báo trong app nhưng chưa có báo thức nền. Sau khi thay đổi lịch, mở Nhắc nhở để làm mới các lịch nhắc trên thiết bị.
 - Google/Microsoft OAuth cần được bật và cấu hình trong Supabase trước khi sử dụng.
+- Xóa tài khoản sau 7 ngày chỉ hoàn tất khi đã triển khai worker/Cron và cấu hình Vault theo [hướng dẫn xóa tài khoản](backend/ACCOUNT_DELETION_SETUP.md); nếu chưa cấu hình, không nên coi việc gửi yêu cầu là đã xóa vĩnh viễn.
 - Khi thêm hoặc nâng cấp chức năng Supabase, cần cập nhật schema tương ứng bằng SQL tổng cho database mới hoặc migration cho database hiện có.
 
 ## Tác giả
