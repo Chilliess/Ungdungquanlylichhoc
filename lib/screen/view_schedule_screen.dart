@@ -1,3 +1,4 @@
+import '../services/calendar_conflicts.dart';
 import '../services/study_data.dart';
 import 'package:untitled/widgets/app_notice.dart';
 import '../models/schedule_recurrence.dart';
@@ -8,7 +9,6 @@ import 'package:calendar_view/calendar_view.dart';
 import 'package:intl/intl.dart';
 import 'lesson_editor.dart';
 import 'lesson_categories.dart';
-import 'lesson_event_tile.dart';
 import 'lesson_search.dart';
 import '../services/learning_store.dart';
 import 'tasks_screen.dart';
@@ -18,7 +18,11 @@ enum _ScheduleView { day, month, year }
 
 class ViewScheduleScreen extends StatefulWidget {
   const ViewScheduleScreen(
-      {super.key, this.openEditorOnStart = false, this.initialDate});
+      {super.key,
+      this.openEditorOnStart = false,
+      this.initialDate,
+      this.embedded = false});
+  final bool embedded;
   final DateTime? initialDate;
   final bool openEditorOnStart;
 
@@ -52,8 +56,6 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
   );
   static const _motionDuration = Duration(milliseconds: 380);
   late final EventController<Map<String, dynamic>> _eventController;
-  final GlobalKey<DayViewState<Map<String, dynamic>>> _dayViewKey =
-      GlobalKey<DayViewState<Map<String, dynamic>>>();
   _ScheduleView _view = _ScheduleView.day;
   DateTime _browseDate = DateTime.now();
 
@@ -305,11 +307,6 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
     if (event == null || !mounted) return;
     await _selectDate(event.date);
     if (!mounted) return;
-    final start = event.startTime;
-    if (start != null) {
-      _dayViewKey.currentState?.animateToDuration(Duration(
-          minutes: (start.hour * 60 + start.minute - 30).clamp(0, 1439)));
-    }
   }
 
   Future<void> _chooseEventType() async {
@@ -395,6 +392,10 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
         recurring: item != null &&
             item['is_exam'] != true &&
             item['start_date'] != item['end_date'],
+        beforeSave: (draft) => confirmCalendarConflicts(
+            context, supabase, draft.toConflictRow(),
+            excludeId: item?['id']?.toString(),
+            isExam: newExam || item?['is_exam'] == true),
         onSave: (draft) async {
           if (supabase.auth.currentUser == null) {
             throw Exception('Vui lòng đăng nhập để lưu lịch học.');
@@ -427,7 +428,6 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
       _view = _ScheduleView.day;
       await _loadDataFromSupabase();
       if (!mounted) return;
-      _dayViewKey.currentState?.jumpToDate(_selectedDate);
       AppNotice.show(context, const SnackBar(content: Text('Đã lưu lịch học')));
     }
   }
@@ -630,7 +630,6 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
   }
 
   Future<void> _selectDate(DateTime date) => _transitionTo(() {
-        _dayViewKey.currentState?.jumpToDate(date);
         _selectedDate = DateTime(date.year, date.month, date.day);
         _browseDate = _selectedDate;
         _view = _ScheduleView.day;
@@ -693,14 +692,17 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
     final end = DateTime(start.year, start.month, start.day + 6);
     final colors = Theme.of(context).colorScheme;
     final today = DateTime.now();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
           key: const ValueKey('schedule-range-header'),
           constraints: const BoxConstraints(minHeight: 56),
-          color: isDark ? const Color(0xFF1F1F1F) : const Color(0xFFE3F2FD),
+          decoration: BoxDecoration(
+            color: colors.primaryContainer.withValues(alpha: .35),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          margin: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(children: [
             IconButton(
               tooltip: 'Ngày trước',
@@ -718,7 +720,7 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
               style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white : Colors.blue.shade900),
+                  color: colors.onSurface),
             )),
             IconButton(
               tooltip: 'Ngày sau',
@@ -981,85 +983,164 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
     );
   }
 
-  static const _timeLabelStyle = TextStyle(
-    fontSize: 15,
-    fontWeight: FontWeight.normal,
-    height: 1,
-    fontFeatures: [FontFeature.tabularFigures()],
-  );
-
-  Widget _buildTimeLineMark(DateTime date) {
-    final now = DateTime.now();
-    final isToday = _sameDate(_selectedDate, now);
-    final isExactHour = now.minute == 0;
-    final activeStyle = _timeLabelStyle.copyWith(color: Colors.red);
-    // Keep the live label clear of the fixed hour labels near an hour boundary.
-    final liveMinuteOffset = now.minute <= 15
-        ? 18.0
-        : now.minute >= 45
-            ? 36.0
-            : now.minute - 7.5;
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Positioned(
-          top: -7.5,
-          left: 0,
-          right: 0,
-          child: Text(
-            DateFormat('HH:mm').format(date),
-            textAlign: TextAlign.center,
-            style: isToday && isExactHour && date.hour == now.hour
-                ? activeStyle
-                : _timeLabelStyle,
+  Widget _buildAgenda() {
+    final colors = Theme.of(context).colorScheme;
+    return AnimatedBuilder(
+      animation: _eventController,
+      builder: (context, _) {
+        final events = _eventController.getEventsOnDay(_selectedDate).toList()
+          ..sort((a, b) =>
+              (a.startTime ?? a.date).compareTo(b.startTime ?? b.date));
+        return ScrollConfiguration(
+          behavior: const MaterialScrollBehavior().copyWith(dragDevices: const {
+            PointerDeviceKind.mouse,
+            PointerDeviceKind.touch,
+            PointerDeviceKind.stylus,
+            PointerDeviceKind.trackpad,
+          }),
+          child: ListView(
+            key: const ValueKey('schedule-agenda'),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+            children: [
+              Text('Ngày ${DateFormat('dd/MM/yyyy').format(_selectedDate)}',
+                  key: const ValueKey('schedule-selected-date'),
+                  style: const TextStyle(
+                      fontSize: 19, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 20),
+              if (events.isEmpty)
+                Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 32),
+                    child: Column(children: [
+                      Icon(Icons.event_available_outlined,
+                          size: 32, color: colors.primary),
+                      const SizedBox(height: 12),
+                      const Text('Ngày này chưa có lịch trình',
+                          textAlign: TextAlign.center),
+                    ])),
+              for (final event in events) ...[
+                _buildAgendaEvent(event),
+                const SizedBox(height: 14),
+              ],
+            ],
           ),
-        ),
-        // The calendar package starts its labels at 01:00.
-        if (date.hour == 1 && date.minute == 0) ...[
-          Positioned(
-            top: -60.0 + 2,
-            left: 0,
-            right: 0,
-            child: IgnorePointer(
-              child: Text(
-                '00:00',
-                key: const ValueKey('schedule-midnight-label'),
-                textAlign: TextAlign.center,
-                style: isToday && isExactHour && now.hour == 0
-                    ? activeStyle
-                    : _timeLabelStyle,
-              ),
-            ),
-          ),
-          if (isToday && !isExactHour)
-            Positioned(
-              top: (now.hour - 1) * 60.0 + liveMinuteOffset,
-              left: 0,
-              right: 0,
-              child: IgnorePointer(
-                child: Text(
-                  DateFormat('HH:mm').format(now),
-                  key: const ValueKey('schedule-live-time-label'),
-                  textAlign: TextAlign.center,
-                  style: activeStyle,
-                ),
-              ),
-            ),
-        ],
-      ],
+        );
+      },
     );
+  }
+
+  Widget _buildAgendaEvent(CalendarEventData<Map<String, dynamic>> event) {
+    final colors = Theme.of(context).colorScheme;
+    final item = event.event ?? <String, dynamic>{};
+    final category = item['category']?.toString().trim() ?? '';
+    final isExam = item['is_exam'] == true;
+    final isStudy = item['is_study'] == true;
+    final label = category.isNotEmpty
+        ? category
+        : isExam
+            ? 'Lịch thi'
+            : isStudy
+                ? 'Tự học'
+                : 'Lịch học';
+    final accent =
+        category.isNotEmpty ? _categoryStore.colorOf(category) : event.color;
+    final subject = item['subjects'];
+    final title = subject is Map
+        ? subject['subject_name']?.toString() ?? event.title
+        : event.title;
+    final room = item['room']?.toString().trim() ?? '';
+    final notes = item['notes']?.toString().trim() ?? '';
+    String time(DateTime? value) =>
+        value == null ? '—' : DateFormat('HH:mm').format(value);
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SizedBox(
+          width: 48,
+          child: Padding(
+              padding: const EdgeInsets.only(top: 18),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(time(event.startTime),
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    Text(time(event.endTime),
+                        style: TextStyle(
+                            fontSize: 12, color: colors.onSurfaceVariant)),
+                  ]))),
+      const SizedBox(width: 10),
+      Expanded(
+          child: Material(
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side:
+                BorderSide(color: colors.outlineVariant.withValues(alpha: .6))),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _showEventDetail(event),
+          child: IntrinsicHeight(
+              child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    child: Container(
+                        width: 4,
+                        decoration: BoxDecoration(
+                            color: accent,
+                            borderRadius: BorderRadius.circular(4)))),
+                Expanded(
+                    child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(label,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: accent,
+                                      fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 8),
+                              Text(title,
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600)),
+                              if (room.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(room,
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        color: colors.onSurfaceVariant)),
+                              ],
+                              if (notes.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(notes,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: colors.onSurfaceVariant)),
+                              ],
+                            ]))),
+              ])),
+        ),
+      )),
+    ]);
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return CalendarControllerProvider(
       controller: _eventController,
       child: Scaffold(
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF11131D)
+            : const Color(0xFFF5F6FB),
         appBar: AppBar(
-          title: const Text('Lịch học & kiểm tra',
-              maxLines: 1, overflow: TextOverflow.ellipsis),
-          titleTextStyle: Theme.of(context).textTheme.titleMedium,
+          automaticallyImplyLeading: !widget.embedded,
+          backgroundColor: Colors.transparent,
+          title: const Text('Lịch của bạn',
+              style: TextStyle(fontWeight: FontWeight.w700)),
           actions: [
             IconButton(
                 key: const ValueKey('schedule-search'),
@@ -1067,101 +1148,53 @@ class _ViewScheduleScreenState extends State<ViewScheduleScreen>
                 onPressed: _isLoading ? null : _searchLessons,
                 icon: const Icon(Icons.search)),
             IconButton(
-                key: const ValueKey('schedule-add'),
-                tooltip: 'Thêm lịch học',
-                onPressed: _isLoading ? null : _chooseEventType,
-                icon: const Icon(Icons.add)),
-            IconButton(
-              tooltip: 'Tải lại lịch',
-              icon: const Icon(Icons.refresh),
-              onPressed: _loadDataFromSupabase,
-            )
+                tooltip: 'Tải lại lịch',
+                onPressed: _loadDataFromSupabase,
+                icon: const Icon(Icons.refresh)),
           ],
         ),
         body: SafeArea(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : Column(children: [
-                  _buildNavigation(),
-                  Expanded(
-                    child: _buildTransition(_view != _ScheduleView.day
-                        ? _buildDateBrowser()
-                        : Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: ScrollConfiguration(
-                                behavior:
-                                    const MaterialScrollBehavior().copyWith(
-                                  dragDevices: const {
-                                    PointerDeviceKind.mouse,
-                                    PointerDeviceKind.touch,
-                                    PointerDeviceKind.stylus,
-                                    PointerDeviceKind.trackpad,
-                                  },
-                                ),
-                                child: DayView<Map<String, dynamic>>(
-                                  key: _dayViewKey,
-                                  controller: _eventController,
-                                  initialDay: _selectedDate,
-                                  minDay: DateTime(2020),
-                                  maxDay: DateTime(2100, 12, 31),
-                                  heightPerMinute: 1,
-                                  timeLineWidth: 60,
-                                  verticalLineOffset: 0,
-                                  timeLineBuilder: _buildTimeLineMark,
-                                  eventTileBuilder:
-                                      (date, events, boundary, start, end) =>
-                                          LessonEventTile(
-                                              event: events.first,
-                                              eventCount: events.length),
-                                  onPageChange: (date, _) => setState(() {
-                                    _selectedDate = date;
-                                    WidgetsBinding.instance
-                                        .addPostFrameCallback((_) {
-                                      if (mounted) _ensureVisibleEvents();
-                                    });
-                                  }),
-                                  dayTitleBuilder: (_) => _buildWeekStrip(),
-                                  onEventTap: (events, date) {
-                                    if (events.isNotEmpty) {
-                                      _showEventDetail(events.first);
-                                    }
-                                  },
-                                  backgroundColor: isDark
-                                      ? const Color(0xFF121212)
-                                      : Colors.white,
-                                  headerStyle: HeaderStyle(
-                                    decoration: BoxDecoration(
-                                        color: isDark
-                                            ? const Color(0xFF1F1F1F)
-                                            : const Color(0xFFE3F2FD)),
-                                    headerTextStyle: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w600,
-                                        color: isDark
-                                            ? Colors.white
-                                            : Colors.blue.shade900),
-                                  ),
-                                  hourIndicatorSettings: HourIndicatorSettings(
-                                    color: isDark
-                                        ? Colors.grey.shade800
-                                        : Colors.grey.shade300,
-                                    height: 1,
-                                    lineStyle: LineStyle.dashed,
-                                  ),
-                                  liveTimeIndicatorSettings:
-                                      const LiveTimeIndicatorSettings(
-                                    color: Colors.red,
-                                    showTime: false,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          )),
-                  ),
-                ]),
-        ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : Center(
+                    child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 820),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                                  child: Text(
+                                      'Lịch học và lịch thi trong cùng một nơi.',
+                                      style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                          fontSize: 13))),
+                              _buildNavigation(),
+                              if (_view == _ScheduleView.day) _buildWeekStrip(),
+                              Expanded(
+                                  child: _buildTransition(
+                                      _view == _ScheduleView.day
+                                          ? _buildAgenda()
+                                          : _buildDateBrowser())),
+                              if (_view == _ScheduleView.day)
+                                Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                        20, 8, 20, 16),
+                                    child: FilledButton.icon(
+                                        key: const ValueKey('schedule-add'),
+                                        style: FilledButton.styleFrom(
+                                            minimumSize:
+                                                const Size.fromHeight(52),
+                                            shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(18))),
+                                        onPressed: _chooseEventType,
+                                        icon: const Icon(Icons.add),
+                                        label: const Text('Thêm lịch học'))),
+                            ])))),
       ),
     );
   }

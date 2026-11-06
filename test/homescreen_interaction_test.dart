@@ -47,6 +47,13 @@ class _DatedHomeService extends _FakeHomeService {
   }
 }
 
+class _OwnedDatedHomeService extends _DatedHomeService {
+  @override
+  String get accountId => 'notification-badge-test';
+  @override
+  Stream<String?> get accountChanges => const Stream.empty();
+}
+
 Future<void> _pumpHome(WidgetTester tester, _FakeHomeService service) async {
   await tester.binding.setSurfaceSize(const Size(400, 800));
   await tester.pumpWidget(
@@ -79,12 +86,28 @@ void main() {
     );
   });
 
+  testWidgets('mark all notifications read clears the home badge',
+      (tester) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await _pumpHome(tester, _OwnedDatedHomeService());
+    final badgeFinder = find.byKey(const ValueKey('home-unread-notifications'));
+    expect(tester.widget<Badge>(badgeFinder).isLabelVisible, isTrue);
+    await tester.tap(find.byTooltip('Thông báo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Đánh dấu tất cả đã đọc'));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(tester.widget<Badge>(badgeFinder).isLabelVisible, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('home prioritizes today and removes redundant summary sections',
       (tester) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await _pumpHome(tester, _FakeHomeService());
 
-    final welcome = tester.getRect(find.text('Xin chào!'));
+    final welcome = tester.getRect(find.text('Bạn học'));
     final today = tester.getRect(find.text('Hôm nay'));
     expect(today.top, greaterThan(welcome.bottom));
     expect(find.text('Buổi hôm nay'), findsNothing);
@@ -151,7 +174,9 @@ void main() {
 
     await _mouseTap(tester, find.text('Lịch học'));
     expect(find.byType(ViewScheduleScreen), findsOneWidget);
-    await tester.pageBack();
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(BackButton), findsNothing);
+    await _mouseTap(tester, find.text('Trang chủ'));
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('Thống kê').last);
@@ -259,16 +284,23 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-      'reminders and account stay together with the new Chat AI destination',
+  testWidgets('notifications stay in header and reminders move to management',
       (tester) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await _pumpHome(tester, _FakeHomeService());
-    final bell = tester.getRect(find.byKey(const ValueKey('home-reminders')));
+    final bell =
+        tester.getRect(find.byKey(const ValueKey('home-notifications')));
     final account = tester.getRect(find.byTooltip('Tài khoản'));
-    expect(bell.right, lessThanOrEqualTo(account.left));
+    expect(account.right, lessThanOrEqualTo(bell.left));
     expect(bell.center.dy, account.center.dy);
-    expect(find.text('Nhắc nhở'), findsNothing);
+    expect(find.text('Nhắc nhở'), findsOneWidget);
+    expect(find.byIcon(Icons.alarm_rounded), findsOneWidget);
+    await tester.tap(find.byTooltip('Thông báo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nhắc nhở đến hạn'), findsOneWidget);
+    expect(find.text('Lịch sắp tới'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     expect(
         find.descendant(
             of: find.byType(NavigationBar), matching: find.text('Chat AI')),

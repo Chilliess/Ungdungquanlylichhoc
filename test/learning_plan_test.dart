@@ -34,8 +34,9 @@ void main() {
       expect(end.isAfter(deadline), false);
       expect(start.hour, greaterThanOrEqualTo(18));
       expect(end.hour, lessThanOrEqualTo(22));
-      if (previous != null)
+      if (previous != null) {
         expect(start.difference(previous).inMinutes, greaterThanOrEqualTo(10));
+      }
       previous = end;
       total += end.difference(start).inMinutes;
     }

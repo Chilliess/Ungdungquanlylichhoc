@@ -5,6 +5,32 @@ import 'package:untitled/services/assistant_context.dart';
 import 'package:untitled/services/chat_history.dart';
 
 void main() {
+  test(
+      'older user facts remain available after long assistant replies drop out',
+      () {
+    final messages = [
+      {'role': 'user', 'content': 'Ngày 6/11/2026, 18:00–24:00, ôn tại nhà.'},
+      {'role': 'assistant', 'content': List.filled(6001, 'a').join()},
+      {'role': 'user', 'content': 'Ba môn: Toán, C++, Cấu trúc dữ liệu.'},
+    ];
+    final recent = assistantContext(messages);
+    expect(assistantEarlierMessages(messages, recent),
+        [messages.first['content']]);
+    expect(assistantEarlierMessages(messages, messages), isEmpty);
+  });
+
+  test('older history never includes assistant guesses and stays within budget',
+      () {
+    final messages = List.generate(
+        100,
+        (i) => {
+              'role': i.isEven ? 'user' : 'assistant',
+              'content': List.filled(1999, 'x').join(),
+            });
+    final earlier = assistantEarlierMessages(messages, const []);
+    expect(jsonEncode(earlier).length, lessThanOrEqualTo(8000));
+    expect(earlier.length, lessThanOrEqualTo(40));
+  });
   test('long context keeps recent complete turns within server limits', () {
     final messages = List.generate(
         25,

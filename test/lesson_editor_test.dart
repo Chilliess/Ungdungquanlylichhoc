@@ -6,7 +6,9 @@ import 'package:untitled/screen/lesson_editor.dart';
 void main() {
   Future<void> openEditor(
       WidgetTester tester, Future<void> Function(LessonDraft) save,
-      {LessonDraft? initial, bool manageRecurrence = false}) async {
+      {LessonDraft? initial,
+      bool manageRecurrence = false,
+      Future<bool> Function(LessonDraft)? beforeSave}) async {
     await tester.binding.setSurfaceSize(const Size(390, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(MaterialApp(
@@ -19,6 +21,7 @@ void main() {
                             initialDate: DateTime(2026, 11, 2),
                             initial: initial,
                             manageRecurrence: manageRecurrence,
+                            beforeSave: beforeSave,
                             onSave: save)),
                     child: const Text('Mở form'))))));
     await tester.tap(find.text('Mở form'));
@@ -37,6 +40,28 @@ void main() {
       await tester.pumpAndSettle();
     }
   }
+
+  testWidgets('canceling conflict check keeps editor and never saves',
+      (tester) async {
+    var saves = 0;
+    var allow = false;
+    final initial = LessonDraft(
+        title: 'Toán',
+        location: 'A6',
+        date: DateTime(2026, 11, 2),
+        start: const TimeOfDay(hour: 7, minute: 0),
+        end: const TimeOfDay(hour: 9, minute: 0));
+    await openEditor(tester, (_) async {
+      saves++;
+    }, initial: initial, beforeSave: (_) async => allow);
+    await tapField(tester, 'lesson-save');
+    expect(saves, 0);
+    expect(find.byType(LessonEditor), findsOneWidget);
+    allow = true;
+    await tapField(tester, 'lesson-save');
+    expect(saves, 1);
+    expect(find.byType(LessonEditor), findsNothing);
+  });
 
   testWidgets(
       'recurrence dropdown saves monthly rule and supports turning repeat off',

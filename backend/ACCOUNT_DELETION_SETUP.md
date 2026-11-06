@@ -16,12 +16,15 @@ Thay thế hoàn toàn luồng OTP/xóa ngay trước đây.
 - Deploy lại `delete-account`, `study-assistant`, `import-timetable` và deploy mới `purge-accounts` với `.\backend\deploy.ps1 -ProjectRef MA_PROJECT_CUA_BAN -Functions study-assistant,import-timetable,delete-account,purge-accounts`.
 - Trong Supabase Vault tạo `account_purge_url` (URL hàm purge-accounts) và `account_purge_secret` (cùng giá trị Edge secret trên).
 - Trong file SQL chính, tìm OPTIONAL_ACCOUNT_PURGE_CRON, sao chép phần SQL của mục đó, bỏ một tiền tố `-- ` mỗi dòng và chạy riêng sau khi Vault đã sẵn sàng. Theo dõi Cron/Edge logs và kết quả HTTP; HTTP được xếp hàng không đồng nghĩa đã xóa thành công.
-- Sau đó phát hành app mới. Nếu chưa chạy migration, app mới sẽ chặn đăng nhập vì không kiểm tra được trạng thái, thay vì bỏ qua bảo vệ.
+- Áp dụng thêm khối `ACCOUNT_RESTORE_HINT` cuối file SQL trước khi phát hành app mới. Khối này giúp phiên đăng nhập mới nhận đúng dấu yêu cầu xóa mà không cần chặn mọi tài khoản để gọi RPC. Giữ nguyên các policy kiểm tra tài khoản đang chờ xóa.
 
 ## Bảo vệ dữ liệu
 
 - Các bảng lịch, môn, nhãn, nhắc nhở và hồ sơ có policy RESTRICTIVE chặn tài khoản đang chờ xóa, kể cả JWT cũ trên thiết bị khác. AI/import cũng kiểm tra trạng thái.
-- Flutter kiểm tra ở cấp ứng dụng khi có phiên đăng nhập, khi trở lại ứng dụng và mỗi 30 giây. Không vào app trong lúc chưa kiểm tra xong hoặc khi kiểm tra thất bại.
+- Tài khoản bình thường vào ứng dụng ngay, không gọi RPC kiểm tra xóa khi đăng nhập hoặc mỗi 30 giây. Đã bỏ thời gian chờ cố định 3 giây ở màn khởi động.
+- Khối `ACCOUNT_RESTORE_HINT` cuối `supabase_database.sql` đồng bộ dấu `account_deletion_pending` và hạn xóa vào **app metadata do máy chủ quản lý**, ngay khi tạo/hủy/cập nhật yêu cầu xóa. Dấu này chỉ điều khiển giao diện, không cấp quyền truy cập dữ liệu.
+- Chỉ khi thông tin Auth cho biết có yêu cầu xóa, Flutter mới chặn để kiểm tra trạng thái thật, hiện lựa chọn khôi phục và kiểm tra lại mỗi 30 giây/trở lại app. Nếu kiểm tra thất bại ở luồng này, vẫn giữ màn khôi phục; không tự hủy yêu cầu xóa.
+- Đăng nhập mới nhận dấu hiện tại từ máy chủ. Phiên đã mở ở thiết bị khác nhận thay đổi khi Auth làm mới phiên; RLS vẫn chặn dữ liệu ngay khi có yêu cầu xóa, kể cả JWT cũ.
 - Khôi phục và worker khóa cùng hàng; hết hạn hoặc đã được worker nhận thì không thể khôi phục. Worker không nhận ID tài khoản từ người dùng.
 - Không tự xóa lịch sử/công việc lưu cục bộ khi mới yêu cầu xóa, để người dùng có thể khôi phục. Dữ liệu cục bộ trên thiết bị offline không thể được máy chủ xóa từ xa; phạm vi xóa tự động là tài khoản và dữ liệu Supabase.
 - Nếu bổ sung Storage, cần bổ sung xử lý file thuộc user; Auth có thể từ chối xóa nếu còn file. Worker ghi số lỗi để người quản trị xử lý, không báo đã xóa khi thất bại.

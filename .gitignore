@@ -40,3 +40,19 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/.kotlin/
+
+# Local deployment state and generated demo packages
+/.wrangler/
+/supabase/.temp/
+/artifacts/releases/*
+!/artifacts/releases/HUONG-DAN.md
+/artifacts/planning-live*.json
+
+# Local credentials and signing material
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+/android/local.properties

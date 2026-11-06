@@ -10,25 +10,46 @@ String assistantErrorMessage(Object error) {
     final details = error.details;
     final code = details is Map ? details['error'] : null;
     const messages = {
+      'Invalid image':
+          'Ảnh không hợp lệ. Chọn PNG, JPEG hoặc WebP không quá 3 MB.',
+      'Image search unsupported': 'Tắt tra cứu web khi gửi ảnh lịch.',
+      'Invalid calendar plan':
+          'Chưa xác định được thay đổi lịch. Hãy ghi rõ tên môn, ngày, giờ và phòng.',
       'Assistant not configured': 'Trợ lý chưa được cấu hình trên máy chủ.',
-      'Assistant quota not configured': 'Máy chủ chưa sẵn sàng kiểm tra lượt dùng trợ lý.',
-      'Account check unavailable': 'Chưa kiểm tra được trạng thái tài khoản. Vui lòng thử lại sau.',
+      'Assistant quota not configured':
+          'Máy chủ chưa sẵn sàng kiểm tra lượt dùng trợ lý.',
+      'Account check unavailable':
+          'Chưa kiểm tra được trạng thái tài khoản. Vui lòng thử lại sau.',
       'Account unavailable': 'Tài khoản hiện chưa được phép sử dụng trợ lý.',
-      'Daily limit reached': 'Bạn đã dùng hết 30 lượt hôm nay. Lượt mới bắt đầu lúc 07:00 ngày mai.',
-      'Gemini rate limit reached': 'Dịch vụ Gemini đã đạt hạn mức dùng chung. Vui lòng thử lại sau.',
-      'Gemini configuration unavailable': 'Gemini từ chối cấu hình kết nối trên máy chủ.',
+      'Daily limit reached':
+          'Bạn đã dùng hết 30 lượt hôm nay. Lượt mới bắt đầu lúc 07:00 ngày mai.',
+      'Gemini rate limit reached':
+          'Dịch vụ Gemini đã đạt hạn mức dùng chung. Vui lòng thử lại sau.',
+      'Gemini configuration unavailable':
+          'Gemini từ chối cấu hình kết nối trên máy chủ.',
       'Gemini model unavailable': 'Model Gemini đã cấu hình không khả dụng.',
-      'Gemini key rejected': 'Gemini từ chối khóa API hoặc quyền truy cập của máy chủ.',
+      'Gemini key rejected':
+          'Gemini từ chối khóa API hoặc quyền truy cập của máy chủ.',
       'Gemini request rejected': 'Gemini không chấp nhận yêu cầu từ máy chủ.',
-      'Gemini response unavailable': 'Gemini chưa trả được câu trả lời hoàn chỉnh. Hãy thử diễn đạt lại.',
-      'Empty response': 'Trợ lý trả về câu trả lời trống. Vui lòng thử lại sau.',
-      'Groq rate limit reached': 'Dịch vụ Groq đã đạt hạn mức dùng chung. Vui lòng thử lại sau.',
+      'Gemini response unavailable':
+          'Gemini chưa trả được câu trả lời hoàn chỉnh. Hãy thử diễn đạt lại.',
+      'Empty response':
+          'Trợ lý trả về câu trả lời trống. Vui lòng thử lại sau.',
+      'Groq rate limit reached':
+          'Dịch vụ Groq đã đạt hạn mức dùng chung. Vui lòng thử lại sau.',
       'Groq model unavailable': 'Model Groq đã cấu hình không khả dụng.',
-      'Groq key rejected': 'Groq từ chối khóa API hoặc quyền truy cập của máy chủ.',
-      'Groq request rejected': 'Groq không chấp nhận yêu cầu. Hãy kiểm tra model và quyền tra cứu web.',
-      'Groq response unavailable': 'Groq chưa trả được câu trả lời hoàn chỉnh. Hãy thử rút ngắn câu hỏi.',
-      'Web search unavailable': 'Tra cứu web chưa được bật trên máy chủ. Bạn có thể tắt Tra cứu web để tiếp tục tư vấn.',
-      'Invalid messages': 'Tin nhắn không hợp lệ hoặc quá dài. Hãy rút ngắn nội dung.',
+      'Groq key rejected':
+          'Groq từ chối khóa API hoặc quyền truy cập của máy chủ.',
+      'Groq request rejected':
+          'Groq không chấp nhận yêu cầu. Hãy kiểm tra model và quyền tra cứu web.',
+      'Groq response unavailable':
+          'Groq chưa trả được câu trả lời hoàn chỉnh. Hãy thử rút ngắn câu hỏi.',
+      'Web search unavailable':
+          'Tra cứu web chưa được bật trên máy chủ. Bạn có thể tắt Tra cứu web để tiếp tục tư vấn.',
+      'Schedule context unavailable':
+          'Chưa đọc được lịch của bạn từ máy chủ. Lịch chưa được gửi cho trợ lý; vui lòng thử lại sau.',
+      'Invalid messages':
+          'Tin nhắn không hợp lệ hoặc quá dài. Hãy rút ngắn nội dung.',
       'Request too large': 'Nội dung quá dài. Hãy rút ngắn tin nhắn.',
     };
     if (messages.containsKey(code)) return messages[code]!;

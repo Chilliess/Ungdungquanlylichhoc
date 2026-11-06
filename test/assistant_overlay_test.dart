@@ -9,6 +9,7 @@ import 'package:untitled/widgets/assistant_overlay.dart';
 
 void main() {
   setUp(() {
+    ChatHistory.resetMemory();
     SharedPreferences.setMockInitialValues({});
     appPreferences.showAssistant = true;
   });
@@ -51,6 +52,21 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Đồng ý và bắt đầu'));
     await tester.pumpAndSettle();
+    expect(find.text('Tra cứu web'), findsNothing);
+    expect(find.text('Trợ lý học tập'), findsOneWidget);
+    expect(find.text('Lên kế hoạch ôn thi'), findsOneWidget);
+    await tester.tap(find.byTooltip('Ảnh và lịch cá nhân'));
+    await tester.pumpAndSettle();
+    expect(find.text('Lịch cá nhân'), findsOneWidget);
+    await tester.tap(find.text('Lịch cá nhân'));
+    await tester.pumpAndSettle();
+    expect(
+        find.byWidgetPredicate((w) =>
+            w is TextField && w.decoration?.hintText == 'Bạn cần hỗ trợ gì?'),
+        findsOneWidget);
+    final send =
+        find.byWidgetPredicate((w) => w is IconButton && w.tooltip == 'Gửi');
+    expect(tester.widget<IconButton>(send).onPressed, isNull);
     await tester.tap(find.byTooltip('Lịch sử trò chuyện'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'phương trình');
@@ -59,10 +75,15 @@ void main() {
     await tester.tap(find.text('Buổi học'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Kiểm tra thế nào?');
+    await tester.pump();
     await tester.tap(find.byTooltip('Gửi'));
     await tester.pumpAndSettle();
     expect(sent!.map((m) => m['role']), ['user', 'assistant', 'user']);
-    expect(find.byTooltip('Sao chép câu trả lời'), findsNWidgets(2));
+    // Older replies may be outside the viewport in the spacious chat layout.
+    expect(find.byTooltip('Sao chép câu trả lời'), findsWidgets);
+    await tester.drag(find.byType(ListView).last, const Offset(0, 500));
+    await tester.pumpAndSettle();
+    expect(find.text('Ta chuyển vế.'), findsOneWidget);
     final saved = await ChatHistory.load('a');
     expect(saved.first['id'], 'math');
     expect((saved.first['messages'] as List).length, 4);
@@ -95,6 +116,7 @@ void main() {
     await tester.tap(find.text('Đồng ý và bắt đầu'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Ôn thi thế nào?');
+    await tester.pump();
     await tester.tap(find.byTooltip('Gửi'));
     await tester.pump();
     await tester.tap(find.byTooltip('Thu gọn'));
@@ -145,6 +167,7 @@ void main() {
     await tester.tap(find.text('Đồng ý và bắt đầu'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Bài tập');
+    await tester.pump();
     await tester.tap(find.byTooltip('Gửi'));
     await tester.pumpAndSettle();
     expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
@@ -170,12 +193,49 @@ void main() {
     await tester.tap(find.text('Đồng ý và bắt đầu'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'hi');
+    await tester.pump();
     await tester.tap(find.byTooltip('Gửi'));
     await tester.pumpAndSettle();
     expect(
         find.text('Trợ lý chưa được cấu hình trên máy chủ.'), findsOneWidget);
     expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
         'hi');
+  });
+
+  testWidgets('consent is remembered separately for each account',
+      (tester) async {
+    final changes = StreamController<String?>();
+    addTearDown(changes.close);
+    await tester.pumpWidget(MaterialApp(
+        home: AssistantOverlay(
+            initialUserId: 'account-a',
+            accountChanges: changes.stream,
+            child: const Scaffold())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Mở trợ lý AI'));
+    await tester.pumpAndSettle();
+    expect(find.text('Đồng ý và bắt đầu'), findsOneWidget);
+
+    await tester.tap(find.text('Đồng ý và bắt đầu'));
+    await tester.pumpAndSettle();
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.getBool('assistant_consent_v1_account-a'), isTrue);
+
+    changes.add('account-b');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Mở trợ lý AI'));
+    await tester.pumpAndSettle();
+    expect(find.text('Đồng ý và bắt đầu'), findsOneWidget);
+    await tester.tap(find.text('Đồng ý và bắt đầu'));
+    await tester.pumpAndSettle();
+
+    changes.add('account-a');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Mở trợ lý AI'));
+    await tester.pumpAndSettle();
+    expect(find.text('Đồng ý và bắt đầu'), findsNothing);
+    expect(find.text('Lên kế hoạch ôn thi'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   test('appearance migrates old theme and persists new preferences', () async {
