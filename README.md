@@ -152,12 +152,12 @@ Lịch học theo tuần cũ lưu các ngày đã chọn trong `day_of_week`. L�
 
 ## Tải và cài ứng dụng
 
-Tải bản phát hành mới nhất từ [GitHub Releases](https://github.com/Chilliess/Ungdungquanlylichhoc/releases/latest):
+## Tải trực tiếp
 
-- **Android:** tải `QuanLyLichHoc-Android.apk`, mở tệp trên điện thoại và cho phép cài ứng dụng từ nguồn này nếu Android yêu cầu. Đây là APK cài trực tiếp, chưa được phát hành trên Google Play.
-- **Windows x64:** tải `QuanLyLichHoc-Windows-x64.zip`, giải nén toàn bộ vào một thư mục rồi chạy `QuanLyLichHoc.exe`. Giữ các tệp DLL và thư mục `data` cạnh tệp EXE.
+- **[Tải ứng dụng Android (APK)](https://github.com/Chilliess/Ungdungquanlylichhoc/releases/latest/download/QuanLyLichHoc-Android.apk):** mở tệp trên điện thoại và cho phép cài ứng dụng từ nguồn này nếu Android yêu cầu. Đây là APK cài trực tiếp, chưa được phát hành trên Google Play.
+- **[Tải ứng dụng Windows x64 (ZIP)](https://github.com/Chilliess/Ungdungquanlylichhoc/releases/latest/download/QuanLyLichHoc-Windows-x64.zip):** giải nén toàn bộ vào một thư mục rồi chạy `QuanLyLichHoc.exe`. Giữ các tệp DLL và thư mục `data` cạnh tệp EXE.
 
-Đăng nhập bằng tài khoản ứng dụng để sử dụng dữ liệu đã lưu. Các bản cài chỉ được đăng tại trang Releases sau khi chủ dự án tạo GitHub Release và đính kèm tệp cài đặt.
+Đăng nhập bằng tài khoản ứng dụng để sử dụng dữ liệu đã lưu. Xem [tất cả bản phát hành](https://github.com/Chilliess/Ungdungquanlylichhoc/releases) nếu muốn chọn phiên bản khác.
 
 ## Yêu cầu và cài đặt
 
