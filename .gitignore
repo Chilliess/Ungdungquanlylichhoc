@@ -47,7 +47,6 @@ app.*.map.json
 /.wrangler/
 /supabase/.temp/
 /artifacts/releases/*
-!/artifacts/releases/HUONG-DAN.md
 /artifacts/planning-live*.json
 
 # Local credentials and signing material
