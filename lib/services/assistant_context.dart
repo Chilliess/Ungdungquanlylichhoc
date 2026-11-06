@@ -1,5 +1,22 @@
 import 'dart:convert';
 
+/// Preserve older user facts without resending long assistant answers.
+List<String> assistantEarlierMessages(
+    List<Map<String, String>> messages, List<Map<String, String>> recent) {
+  final earlier = <String>[];
+  for (final message in messages.take(messages.length - recent.length)) {
+    if (message['role'] != 'user') continue;
+    final content = message['content']!;
+    if (content.length > 2000 ||
+        earlier.length == 40 ||
+        jsonEncode([...earlier, content]).length > 8000) {
+      break;
+    }
+    earlier.add(content);
+  }
+  return earlier;
+}
+
 /// Keep complete recent turns within the Edge Function's JSON size limit.
 /// The full conversation remains in local history.
 List<Map<String, String>> assistantContext(List<Map<String, String>> messages,

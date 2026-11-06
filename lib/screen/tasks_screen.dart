@@ -8,38 +8,103 @@ import '../widgets/app_notice.dart';
 import 'confirm_action.dart';
 
 class TasksScreen extends StatefulWidget {
-  const TasksScreen({super.key});
+  const TasksScreen(
+      {super.key, this.embedded = false, this.store, this.loadPlan});
+  final bool embedded;
+  final LearningStore? store;
+  final Future<StudyPlan> Function(List<int> hours)? loadPlan;
   @override
   State<TasksScreen> createState() => _TasksScreenState();
 }
 
 class _TasksScreenState extends State<TasksScreen> {
-  bool _loading = true, _planning = false, _done = false;
+  late final LearningStore _store = widget.store ?? learningStore;
+  bool _loading = true, _planning = false, _done = false, _saving = false;
+  String? _subjectFilter;
   String? _error;
+  Map<String, dynamic>? _suggestion;
+  bool _suggestionFailed = false;
+  Timer? _suggestionTimer;
+  int _suggestionVersion = 0;
   @override
   void initState() {
     super.initState();
+    _store.addListener(_storeChanged);
     _load();
+  }
+
+  void _storeChanged() {
+    if (!mounted) return;
+    _suggestionVersion++;
+    _suggestion = null;
+    _suggestionTimer?.cancel();
+    _suggestionTimer =
+        Timer(const Duration(milliseconds: 150), _refreshSuggestion);
+  }
+
+  Future<void> _refreshSuggestion() async {
+    final version = ++_suggestionVersion;
+    if (_store.pending.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _suggestion = null;
+          _suggestionFailed = false;
+        });
+      }
+      return;
+    }
+    try {
+      final plan = await _loadPlan([18, 22]);
+      if (mounted && version == _suggestionVersion) {
+        setState(() {
+          _suggestion = plan.blocks.isEmpty ? null : plan.blocks.first;
+          _suggestionFailed = false;
+        });
+      }
+    } catch (_) {
+      if (mounted && version == _suggestionVersion) {
+        setState(() {
+          _suggestion = null;
+          _suggestionFailed = true;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _suggestionTimer?.cancel();
+    _store.removeListener(_storeChanged);
+    super.dispose();
   }
 
   Future<void> _load() async {
     try {
-      await learningStore.load();
+      await _store.load();
     } catch (_) {
       _error = 'Không đọc được dữ liệu công việc.';
     }
-    if (mounted) setState(() => _loading = false);
+    if (mounted) {
+      setState(() => _loading = false);
+      _storeChanged();
+    }
   }
 
   Future<void> _edit([Map<String, dynamic>? task]) async {
+    final owner = Supabase.instance.client.auth.currentUser?.id;
     final result = await showDialog<Map<String, dynamic>>(
-        context: context, builder: (_) => TaskEditor(task: task));
-    if (result == null || !mounted) return;
-    learningStore.tasks.removeWhere((t) => t['id'] == result['id']);
-    learningStore.tasks.add(result);
+        context: context,
+        builder: (_) => TaskEditor(task: task, subjects: _store.subjects));
+    if (result == null ||
+        !mounted ||
+        Supabase.instance.client.auth.currentUser?.id != owner) {
+      return;
+    }
+    _store.tasks.removeWhere((t) => t['id'] == result['id']);
+    _store.tasks.add(result);
     // Changes invalidate future proposals; past activity remains in the statistics.
     if (task != null) {
-      learningStore.blocks.removeWhere((b) =>
+      _store.blocks.removeWhere((b) =>
           b['taskId'] == task['id'] &&
           DateTime.parse(b['start']).isAfter(DateTime.now()));
     }
@@ -47,18 +112,98 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 
   Future<void> _save() async {
+    setState(() => _saving = true);
     try {
-      await learningStore.save();
+      await _store.save();
     } catch (_) {
       if (mounted) {
         AppNotice.show(
             context,
             const SnackBar(
-                content: Text(
-                    'Chưa lưu được thay đổi trên thiết bị. Vui lòng thử lại.')));
+                content: Text('Chưa lưu được thay đổi. Vui lòng thử lại.')));
       }
     }
-    if (mounted) setState(() {});
+    if (mounted) setState(() => _saving = false);
+  }
+
+  Future<void> _refresh() async {
+    setState(() => _loading = true);
+    try {
+      await _store.refresh();
+    } catch (_) {
+      _error = 'Chưa cập nhật được công việc.';
+    }
+    if (mounted) {
+      setState(() {
+        _loading = false;
+        if (!_store.subjects.any((s) => s['id'] == _subjectFilter)) {
+          _subjectFilter = null;
+        }
+      });
+      _storeChanged();
+    }
+  }
+
+  Future<StudyPlan> _loadPlan(List<int> hours) async {
+    if (widget.loadPlan != null) return widget.loadPlan!(hours);
+    final client = Supabase.instance.client, now = DateTime.now();
+    final owner = client.auth.currentUser?.id;
+    if (owner == null) throw StateError('Sign in');
+    final results = await Future.wait([
+      client.from('schedules').select().eq('user_id', owner),
+      client.from('schedule_exams').select().eq('user_id', owner),
+    ]);
+    if (client.auth.currentUser?.id != owner) {
+      throw StateError('Account changed');
+    }
+    final busy = <BusySlot>[];
+    DateTime at(DateTime day, String value) {
+      final p = value.split(':');
+      return DateTime(
+          day.year, day.month, day.day, int.parse(p[0]), int.parse(p[1]));
+    }
+
+    for (final row in results[0]) {
+      for (var i = 0; i < 14; i++) {
+        final day = DateTime(now.year, now.month, now.day + i);
+        if (ScheduleRecurrence.occursOn(row, day)) {
+          busy.add(
+              BusySlot(at(day, row['start_time']), at(day, row['end_time'])));
+        }
+      }
+    }
+    for (final row in results[1]) {
+      final day = DateTime.parse(row['exam_date']);
+      busy.add(BusySlot(at(day, row['start_time']), at(day, row['end_time'])));
+    }
+    for (final b in _store.blocks) {
+      busy.add(BusySlot(DateTime.parse(b['start']), DateTime.parse(b['end'])));
+    }
+    final tasks = _store.pending.map((t) {
+      final planned = _store.blocks
+          .where((b) =>
+              b['taskId'] == t['id'] && DateTime.parse(b['start']).isAfter(now))
+          .fold<int>(
+              0,
+              (v, b) =>
+                  v +
+                  DateTime.parse(b['end'])
+                      .difference(DateTime.parse(b['start']))
+                      .inMinutes);
+      return {
+        ...t,
+        'subject': _store.subjectName(t),
+        'remaining':
+            ((t['minutes'] as int) - _store.actualFor(t['id']) - planned)
+                .clamp(0, 100000)
+      };
+    }).toList();
+    return planStudy(
+        tasks: tasks,
+        busy: busy,
+        now: now,
+        startHour: hours[0],
+        endHour: hours[1]);
   }
 
   Future<void> _plan() async {
@@ -70,65 +215,10 @@ class _TasksScreenState extends State<TasksScreen> {
       _error = null;
     });
     try {
-      final client = Supabase.instance.client, now = DateTime.now();
+      final client = Supabase.instance.client;
       final owner = client.auth.currentUser?.id;
-      if (owner == null) throw StateError('Sign in');
-      final results = await Future.wait([
-        client.from('schedules').select().eq('user_id', owner),
-        client.from('schedule_exams').select().eq('user_id', owner),
-      ]);
-      final busy = <BusySlot>[];
-      DateTime at(DateTime day, String value) {
-        final p = value.split(':');
-        return DateTime(
-            day.year, day.month, day.day, int.parse(p[0]), int.parse(p[1]));
-      }
-
-      for (final row in results[0]) {
-        for (var i = 0; i < 14; i++) {
-          final day = DateTime(now.year, now.month, now.day + i);
-          if (ScheduleRecurrence.occursOn(row, day)) {
-            busy.add(
-                BusySlot(at(day, row['start_time']), at(day, row['end_time'])));
-          }
-        }
-      }
-      for (final row in results[1]) {
-        final day = DateTime.parse(row['exam_date']);
-        busy.add(
-            BusySlot(at(day, row['start_time']), at(day, row['end_time'])));
-      }
-      for (final b in learningStore.blocks) {
-        busy.add(
-            BusySlot(DateTime.parse(b['start']), DateTime.parse(b['end'])));
-      }
-      final tasks = learningStore.pending.map((t) {
-        final planned = learningStore.blocks
-            .where((b) =>
-                b['taskId'] == t['id'] &&
-                DateTime.parse(b['start']).isAfter(now))
-            .fold<int>(
-                0,
-                (v, b) =>
-                    v +
-                    DateTime.parse(b['end'])
-                        .difference(DateTime.parse(b['start']))
-                        .inMinutes);
-        return {
-          ...t,
-          'remaining': ((t['minutes'] as int) -
-                  learningStore.actualFor(t['id']) -
-                  planned)
-              .clamp(0, 100000)
-        };
-      }).toList();
-      final plan = planStudy(
-          tasks: tasks,
-          busy: busy,
-          now: now,
-          startHour: hours[0],
-          endHour: hours[1]);
-      if (!mounted) return;
+      final plan = await _loadPlan(hours);
+      if (!mounted || client.auth.currentUser?.id != owner) return;
       final accepted = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
@@ -170,7 +260,7 @@ class _TasksScreenState extends State<TasksScreen> {
                 ],
               ));
       if (accepted == true && mounted && owner == client.auth.currentUser?.id) {
-        learningStore.blocks.addAll(plan.blocks);
+        _store.blocks.addAll(plan.blocks);
         await _save();
       }
     } catch (_) {
@@ -183,186 +273,335 @@ class _TasksScreenState extends State<TasksScreen> {
     }
   }
 
+  Future<void> _taskAction(Map<String, dynamic> task, String action) async {
+    if (action == 'edit') {
+      await _edit(task);
+      return;
+    }
+    if (action == 'delete') {
+      if (!await confirmAction(context,
+          deleting: true,
+          message:
+              'Xóa công việc và các phiên tự học đã xếp? Nhật ký học đã ghi nhận được giữ lại.')) {
+        return;
+      }
+      _store.tasks.remove(task);
+      _store.blocks.removeWhere((b) => b['taskId'] == task['id']);
+    } else {
+      task['done'] = task['done'] != true;
+      if (task['done'] == true) {
+        _store.blocks.removeWhere((b) =>
+            b['taskId'] == task['id'] &&
+            DateTime.parse(b['start']).isAfter(DateTime.now()));
+      }
+    }
+    await _save();
+  }
+
+  Future<void> _focus(Map<String, dynamic> task) async {
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => FocusScreen(task: task)));
+    if (mounted) {
+      setState(() {});
+      _refreshSuggestion();
+    }
+  }
+
+  Widget _taskRow(Map<String, dynamic> task) {
+    final colors = Theme.of(context).colorScheme;
+    final complete = task['done'] == true;
+    final deadline = DateTime.parse(task['deadline']);
+    return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Checkbox(
+                value: complete,
+                onChanged:
+                    _planning ? null : (_) => _taskAction(task, 'toggle'),
+                semanticLabel: 'Hoàn thành ${task['title']}'),
+            Expanded(
+                child: Padding(
+                    padding: const EdgeInsets.only(top: 7),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(task['title'],
+                              style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  decoration: complete
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                  color: complete
+                                      ? colors.onSurfaceVariant
+                                      : colors.onSurface)),
+                          const SizedBox(height: 5),
+                          Text(_store.subjectName(task),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: colors.onSurfaceVariant)),
+                          const SizedBox(height: 4),
+                          Text(
+                              'Hạn ${DateFormat('dd/MM · HH:mm').format(deadline)}',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: !complete &&
+                                          deadline.isBefore(DateTime.now())
+                                      ? colors.error
+                                      : colors.onSurfaceVariant)),
+                          const SizedBox(height: 8),
+                          Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                  color: colors.primaryContainer
+                                      .withValues(alpha: .5),
+                                  borderRadius: BorderRadius.circular(8)),
+                              child: Text(
+                                  '${[
+                                    'Dễ',
+                                    'Vừa',
+                                    'Khó'
+                                  ][(task['difficulty'] as int) - 1]} · ${task['minutes']} phút',
+                                  style: TextStyle(
+                                      fontSize: 11, color: colors.primary))),
+                          if (_store.actualFor(task['id']) > 0)
+                            Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                    'Đã học ${_store.actualFor(task['id'])} phút',
+                                    style: const TextStyle(fontSize: 11))),
+                        ]))),
+            PopupMenuButton<String>(
+                tooltip: 'Thao tác công việc',
+                enabled: !_planning,
+                onSelected: (action) => _taskAction(task, action),
+                itemBuilder: (_) => [
+                      const PopupMenuItem(
+                          value: 'edit', child: Text('Chỉnh sửa')),
+                      PopupMenuItem(
+                          value: 'toggle',
+                          child: Text(complete
+                              ? 'Đánh dấu chưa xong'
+                              : 'Đánh dấu hoàn thành')),
+                      const PopupMenuItem(value: 'delete', child: Text('Xóa')),
+                    ]),
+          ]),
+          if (!complete)
+            Padding(
+                padding: const EdgeInsets.only(left: 48, top: 4),
+                child: TextButton.icon(
+                    onPressed: () => _focus(task),
+                    icon: const Icon(Icons.play_circle_outline, size: 18),
+                    label: const Text('Bắt đầu tập trung'))),
+        ]));
+  }
+
+  Widget _suggestionCard() {
+    final colors = Theme.of(context).colorScheme;
+    final suggestion = _suggestion;
+    final date =
+        suggestion == null ? null : DateTime.parse(suggestion['start']);
+    final today = DateUtils.dateOnly(DateTime.now());
+    final label = date == null
+        ? null
+        : DateUtils.isSameDay(date, today)
+            ? 'Hôm nay'
+            : DateUtils.isSameDay(date, today.add(const Duration(days: 1)))
+                ? 'Ngày mai'
+                : DateFormat('dd/MM').format(date);
+    return Container(
+        key: const ValueKey('task-free-slot'),
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+            color: colors.primaryContainer.withValues(alpha: .48),
+            borderRadius: BorderRadius.circular(24)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('KHOẢNG TRỐNG PHÙ HỢP',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1,
+                  color: colors.onSurfaceVariant)),
+          const SizedBox(height: 12),
+          Text(
+              date == null
+                  ? (_store.pending.isEmpty
+                      ? 'Một khoảng nghỉ cho bạn'
+                      : 'Chọn khung giờ phù hợp')
+                  : '$label, ${DateFormat('HH:mm').format(date)} – ${DateFormat('HH:mm').format(DateTime.parse(suggestion!['end']))}',
+              style:
+                  const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          Text(
+              suggestion == null
+                  ? (_store.pending.isEmpty
+                      ? 'Thêm công việc để bắt đầu chia nhỏ mục tiêu.'
+                      : _suggestionFailed
+                          ? 'Chưa tải đủ lịch để gợi ý khoảng trống. Bạn có thể thử xếp lịch lại.'
+                          : 'Kiểm tra lịch và hạn chót trước khi chọn phiên tự học.')
+                  : 'Một phiên tự học để bắt đầu “${suggestion['title']}”. Đề xuất này chưa được lưu.',
+              style: TextStyle(color: colors.onSurfaceVariant, height: 1.5)),
+          const SizedBox(height: 18),
+          FilledButton.tonalIcon(
+              onPressed: _planning || _store.pending.isEmpty ? null : _plan,
+              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+              label: const Text('Xem phương án xếp lịch')),
+        ]));
+  }
+
+  Widget _content() {
+    final colors = Theme.of(context).colorScheme;
+    final tasks = _store.tasks
+        .where((t) =>
+            (t['done'] == true) == _done &&
+            (_subjectFilter == null || t['subjectId'] == _subjectFilter))
+        .toList()
+      ..sort((a, b) =>
+          (a['deadline'] as String).compareTo(b['deadline'] as String));
+    final scoped = _store.tasks
+        .where(
+            (t) => _subjectFilter == null || t['subjectId'] == _subjectFilter)
+        .toList();
+    final doneCount = scoped.where((t) => t['done'] == true).length;
+    return Center(
+        child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: ListView(
+                padding: const EdgeInsets.fromLTRB(22, 26, 22, 100),
+                children: [
+                  const Text('Việc cần làm',
+                      style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -.7)),
+                  const SizedBox(height: 8),
+                  Text('Chia nhỏ mục tiêu, tiến từng bước.',
+                      style: TextStyle(color: colors.onSurfaceVariant)),
+                  const SizedBox(height: 20),
+                  Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilledButton.icon(
+                          onPressed: () => _edit(),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Công việc'))),
+                  Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                          onPressed: _refresh,
+                          icon: const Icon(Icons.sync_rounded),
+                          label: const Text('Đồng bộ'))),
+                  if (_store.subjects.isNotEmpty)
+                    DropdownButtonFormField<String>(
+                      initialValue: _subjectFilter,
+                      isExpanded: true,
+                      decoration:
+                          const InputDecoration(labelText: 'Lọc theo môn học'),
+                      items: [
+                        const DropdownMenuItem<String>(
+                            value: null, child: Text('Tất cả môn học')),
+                        for (final subject in _store.subjects)
+                          DropdownMenuItem(
+                              value: subject['id'] as String,
+                              child: Text(subject['subject_name'] as String))
+                      ],
+                      onChanged: (id) => setState(() => _subjectFilter = id),
+                    ),
+                  const SizedBox(height: 24),
+                  Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 18),
+                      decoration: BoxDecoration(
+                          color: colors.surfaceContainerLowest,
+                          border: Border.all(
+                              color:
+                                  colors.outlineVariant.withValues(alpha: .5)),
+                          borderRadius: BorderRadius.circular(24)),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                                alignment: WrapAlignment.spaceBetween,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 18,
+                                runSpacing: 8,
+                                children: [
+                                  const Text('Ưu tiên tuần này',
+                                      style: TextStyle(
+                                          fontSize: 19,
+                                          fontWeight: FontWeight.w700)),
+                                  OutlinedButton.icon(
+                                      onPressed:
+                                          _planning || _store.pending.isEmpty
+                                              ? null
+                                              : _plan,
+                                      icon: const Icon(
+                                          Icons.auto_fix_high_rounded,
+                                          size: 18),
+                                      label: Text(_planning
+                                          ? 'Đang kiểm tra…'
+                                          : 'Tự xếp lịch')),
+                                ]),
+                            const SizedBox(height: 10),
+                            Wrap(spacing: 8, children: [
+                              ChoiceChip(
+                                  label: Text(
+                                      'Cần làm · ${_store.pending.length}'),
+                                  selected: !_done,
+                                  onSelected: (_) =>
+                                      setState(() => _done = false)),
+                              ChoiceChip(
+                                  label: Text('Đã xong · $doneCount'),
+                                  selected: _done,
+                                  onSelected: (_) =>
+                                      setState(() => _done = true)),
+                            ]),
+                            if (_error != null)
+                              Padding(
+                                  padding: const EdgeInsets.only(top: 16),
+                                  child: Text(_error!,
+                                      style: TextStyle(color: colors.error))),
+                            if (tasks.isEmpty)
+                              Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 30),
+                                  child: Text(
+                                      _done
+                                          ? 'Chưa có công việc hoàn thành.'
+                                          : 'Chưa có công việc. Bấm + Công việc để thêm.',
+                                      style: TextStyle(
+                                          color: colors.onSurfaceVariant))),
+                            for (var i = 0; i < tasks.length; i++) ...[
+                              _taskRow(tasks[i]),
+                              if (i < tasks.length - 1)
+                                const Divider(height: 1, indent: 48),
+                            ],
+                          ])),
+                  const SizedBox(height: 22),
+                  _suggestionCard(),
+                  const SizedBox(height: 16),
+                  Text(
+                      'Đã hoàn thành $doneCount/${scoped.length} công việc · ${_store.cloudSynced ? 'Đã đồng bộ tài khoản' : 'Đã lưu trên máy · Chờ đồng bộ'}.',
+                      style: TextStyle(
+                          color: colors.onSurfaceVariant, fontSize: 12)),
+                ])));
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Công việc'), actions: [
-          IconButton(
-              tooltip: 'Thêm công việc',
-              onPressed: () => _edit(),
-              icon: const Icon(Icons.add))
-        ]),
-        body: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : ListenableBuilder(
-                listenable: learningStore,
-                builder: (context, _) => Center(
-                    child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 760),
-                        child: ListView(
-                            padding: const EdgeInsets.all(20),
-                            children: [
-                              Text('Từng bước tới mục tiêu',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .headlineSmall),
-                              const SizedBox(height: 8),
-                              const Text(
-                                  'Bài tập, ôn thi và lịch tự học của bạn. Dữ liệu công việc lưu trên thiết bị này.'),
-                              const SizedBox(height: 20),
-                              FilledButton.icon(
-                                  onPressed: _planning ? null : _plan,
-                                  icon: const Icon(Icons.auto_fix_high),
-                                  label: Text(_planning
-                                      ? 'Đang kiểm tra lịch…'
-                                      : 'Tự xếp lịch học')),
-                              const SizedBox(height: 16),
-                              SegmentedButton<bool>(
-                                  segments: const [
-                                    ButtonSegment(
-                                        value: false, label: Text('Cần làm')),
-                                    ButtonSegment(
-                                        value: true, label: Text('Hoàn thành'))
-                                  ],
-                                  selected: {
-                                    _done
-                                  },
-                                  onSelectionChanged: (v) =>
-                                      setState(() => _done = v.first)),
-                              if (_error != null)
-                                Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 16),
-                                    child: Text(_error!,
-                                        style: TextStyle(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .error))),
-                              const SizedBox(height: 16),
-                              if (!learningStore.tasks
-                                  .any((t) => (t['done'] == true) == _done))
-                                const Padding(
-                                    padding: EdgeInsets.all(24),
-                                    child: Text(
-                                        'Chưa có công việc trong mục này. Nhấn + để thêm.')),
-                              for (final task in learningStore.tasks
-                                  .where((t) => (t['done'] == true) == _done))
-                                Card(
-                                    elevation: 0,
-                                    margin: const EdgeInsets.only(bottom: 12),
-                                    child: Padding(
-                                        padding: const EdgeInsets.all(16),
-                                        child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Row(children: [
-                                                Expanded(
-                                                    child: Text(task['title'],
-                                                        style: Theme.of(context)
-                                                            .textTheme
-                                                            .titleMedium)),
-                                                PopupMenuButton<String>(
-                                                    onSelected: (action) async {
-                                                      if (action == 'edit') {
-                                                        await _edit(task);
-                                                        return;
-                                                      }
-                                                      if (!await confirmAction(
-                                                          context,
-                                                          deleting: action ==
-                                                              'delete',
-                                                          message: action ==
-                                                                  'delete'
-                                                              ? 'Xóa công việc và các phiên tự học đã xếp? Nhật ký học đã ghi nhận được giữ lại.'
-                                                              : 'Thay đổi trạng thái công việc này?')) {
-                                                        return;
-                                                      }
-                                                      if (action == 'delete') {
-                                                        learningStore.tasks
-                                                            .remove(task);
-                                                        learningStore.blocks
-                                                            .removeWhere((b) =>
-                                                                b['taskId'] ==
-                                                                task['id']);
-                                                      } else {
-                                                        task['done'] = !_done;
-                                                        if (task['done'] ==
-                                                            true) {
-                                                          learningStore.blocks
-                                                              .removeWhere((b) =>
-                                                                  b['taskId'] ==
-                                                                      task[
-                                                                          'id'] &&
-                                                                  DateTime.parse(b[
-                                                                          'start'])
-                                                                      .isAfter(
-                                                                          DateTime
-                                                                              .now()));
-                                                        }
-                                                      }
-                                                      await _save();
-                                                    },
-                                                    itemBuilder: (_) => [
-                                                          const PopupMenuItem(
-                                                              value: 'edit',
-                                                              child: Text(
-                                                                  'Chỉnh sửa')),
-                                                          PopupMenuItem(
-                                                              value: 'done',
-                                                              child: Text(_done
-                                                                  ? 'Đánh dấu chưa xong'
-                                                                  : 'Hoàn thành')),
-                                                          const PopupMenuItem(
-                                                              value: 'delete',
-                                                              child: Text('Xóa',
-                                                                  style: TextStyle(
-                                                                      color: Colors
-                                                                          .red)))
-                                                        ])
-                                              ]),
-                                              Text(task['subject']),
-                                              const SizedBox(height: 8),
-                                              Text(
-                                                  'Hạn ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.parse(task['deadline']))}',
-                                                  style: TextStyle(
-                                                      color: DateTime.parse(task[
-                                                                      'deadline'])
-                                                                  .isBefore(DateTime
-                                                                      .now()) &&
-                                                              !_done
-                                                          ? Theme.of(context)
-                                                              .colorScheme
-                                                              .error
-                                                          : null)),
-                                              const SizedBox(height: 8),
-                                              Text('${[
-                                                'Dễ',
-                                                'Vừa',
-                                                'Khó'
-                                              ][(task['difficulty'] as int) - 1]} · Dự kiến ${task['minutes']} phút · Đã học ${learningStore.actualFor(task['id'])} phút'),
-                                              if (!_done)
-                                                Align(
-                                                    alignment:
-                                                        Alignment.centerRight,
-                                                    child: TextButton.icon(
-                                                        onPressed: () async {
-                                                          await Navigator.of(
-                                                                  context)
-                                                              .push(MaterialPageRoute(
-                                                                  builder: (_) =>
-                                                                      FocusScreen(
-                                                                          task:
-                                                                              task)));
-                                                          if (mounted) {
-                                                            setState(() {});
-                                                          }
-                                                        },
-                                                        icon: const Icon(Icons
-                                                            .play_circle_outline),
-                                                        label: const Text(
-                                                            'Bắt đầu tập trung'))),
-                                            ]))),
-                            ])))),
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF11131D)
+            : const Color(0xFFF5F6FB),
+        appBar: widget.embedded ? null : AppBar(title: const Text('Công việc')),
+        body: SafeArea(
+            bottom: false,
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : ListenableBuilder(
+                    listenable: _store,
+                    builder: (_, __) =>
+                        AbsorbPointer(absorbing: _saving, child: _content()))),
       );
 }
 
@@ -407,8 +646,9 @@ class _StudyHoursDialogState extends State<StudyHoursDialog> {
 }
 
 class TaskEditor extends StatefulWidget {
-  const TaskEditor({super.key, this.task});
+  const TaskEditor({super.key, this.task, this.subjects = const []});
   final Map<String, dynamic>? task;
+  final List<Map<String, dynamic>> subjects;
   @override
   State<TaskEditor> createState() => _TaskEditorState();
 }
@@ -418,12 +658,23 @@ class _TaskEditorState extends State<TaskEditor> {
   late final TextEditingController title, subject, minutes;
   late DateTime deadline;
   int difficulty = 2;
+  String? _subjectId;
   @override
   void initState() {
     super.initState();
     final t = widget.task;
+    _subjectId = t?['subjectId'] as String?;
     title = TextEditingController(text: t?['title']);
     subject = TextEditingController(text: t?['subject']);
+    final matches = widget.subjects
+        .where((s) =>
+            s['id'] == t?['subjectId'] ||
+            (t?['subjectId'] == null && s['subject_name'] == t?['subject']))
+        .toList();
+    if (matches.length == 1) {
+      _subjectId = matches.single['id'] as String;
+      subject.text = matches.single['subject_name'] as String;
+    }
     minutes = TextEditingController(text: '${t?['minutes'] ?? 120}');
     deadline = t == null
         ? DateTime.now().add(const Duration(days: 3))
@@ -456,13 +707,40 @@ class _TaskEditorState extends State<TaskEditor> {
                             const InputDecoration(labelText: 'Tên công việc *'),
                         validator: (v) =>
                             v!.trim().isEmpty ? 'Nhập tên công việc' : null),
-                    TextFormField(
-                        controller: subject,
-                        maxLength: 120,
-                        decoration:
-                            const InputDecoration(labelText: 'Môn học *'),
-                        validator: (v) =>
-                            v!.trim().isEmpty ? 'Nhập môn học' : null),
+                    DropdownButtonFormField<String>(
+                        initialValue: _subjectId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                            labelText: 'Liên kết môn học'),
+                        items: [
+                          const DropdownMenuItem<String>(
+                              value: null,
+                              child: Text('Công việc cá nhân / môn khác')),
+                          if (_subjectId != null &&
+                              !widget.subjects
+                                  .any((s) => s['id'] == _subjectId))
+                            DropdownMenuItem(
+                                value: _subjectId, child: Text(subject.text)),
+                          for (final s in widget.subjects)
+                            DropdownMenuItem(
+                                value: s['id'] as String,
+                                child: Text(s['subject_name'] as String))
+                        ],
+                        onChanged: (id) => setState(() {
+                              _subjectId = id;
+                              if (id != null) {
+                                subject.text = widget.subjects.firstWhere(
+                                        (s) => s['id'] == id)['subject_name']
+                                    as String;
+                              }
+                            })),
+                    if (_subjectId == null)
+                      TextFormField(
+                          controller: subject,
+                          maxLength: 120,
+                          decoration: const InputDecoration(
+                              labelText:
+                                  'Môn học / nhóm công việc (tùy chọn)')),
                     ListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text('Deadline'),
@@ -523,7 +801,10 @@ class _TaskEditorState extends State<TaskEditor> {
                   Navigator.pop(context, {
                     'id': widget.task?['id'] ?? LearningStore.id(),
                     'title': title.text.trim(),
-                    'subject': subject.text.trim(),
+                    'subject': subject.text.trim().isEmpty
+                        ? 'Cá nhân'
+                        : subject.text.trim(),
+                    'subjectId': _subjectId,
                     'deadline': deadline.toIso8601String(),
                     'difficulty': difficulty,
                     'minutes': int.parse(minutes.text),
@@ -542,6 +823,7 @@ class FocusScreen extends StatefulWidget {
 }
 
 class _FocusScreenState extends State<FocusScreen> with WidgetsBindingObserver {
+  late final String? _owner;
   final _watch = Stopwatch();
   Timer? _timer;
   bool _saved = false, _saving = false;
@@ -549,6 +831,7 @@ class _FocusScreenState extends State<FocusScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _owner = Supabase.instance.client.auth.currentUser?.id;
     WidgetsBinding.instance.addObserver(this);
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
@@ -583,12 +866,18 @@ class _FocusScreenState extends State<FocusScreen> with WidgetsBindingObserver {
       return;
     }
     if (!mounted) return;
+    if (_owner == null ||
+        Supabase.instance.client.auth.currentUser?.id != _owner) {
+      setState(() => _error = 'Tài khoản đã thay đổi. Hãy mở lại công việc.');
+      return;
+    }
     setState(() => _saving = true);
     final log = {
       'id': LearningStore.id(),
       'taskId': widget.task['id'],
       'title': widget.task['title'],
       'subject': widget.task['subject'],
+      'subjectId': widget.task['subjectId'],
       'date': DateTime.now().toIso8601String(),
       'minutes': _watch.elapsed.inMinutes
     };

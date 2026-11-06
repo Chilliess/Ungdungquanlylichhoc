@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.14)
+project(branding_migration_test LANGUAGES CXX)
+add_executable(branding_migration_test migration_test.cpp)
+target_compile_features(branding_migration_test PRIVATE cxx_std_17)
+if(MSVC)
+  target_compile_options(branding_migration_test PRIVATE /utf-8)
+endif()

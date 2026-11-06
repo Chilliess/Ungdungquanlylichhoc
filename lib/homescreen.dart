@@ -1,3 +1,5 @@
+import 'models/study_notification.dart';
+import 'services/notification_reads.dart';
 import 'dart:async';
 import 'services/study_data.dart';
 import 'widgets/assistant_overlay.dart';
@@ -8,6 +10,7 @@ import 'models/home_models.dart';
 import 'models/schedule_recurrence.dart';
 import 'screen/info_account.dart';
 import 'screen/schedule_announcement.dart';
+import 'screen/notifications_screen.dart';
 import 'screen/settings.dart';
 import 'screen/statistical.dart';
 import 'screen/subject_management_screen.dart';
@@ -29,16 +32,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _loading = true, _failed = false, _hasSnapshot = false;
   int _loadVersion = 0;
   Timer? _refreshDebounce;
+  Timer? _notificationClock;
   StreamSubscription<String?>? _accounts;
   String? _owner;
   DateTime? _selectedUpcomingDate;
   bool _upcomingDatePicked = false;
+  int _activeTab = 0;
+  ViewScheduleScreen? _calendarTab;
+  TasksScreen? _tasksTab;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     studyDataRevision.addListener(_dataChanged);
     learningStore.addListener(_learningChanged);
+    notificationReads.addListener(_learningChanged);
+    _notificationClock = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
     _owner = _service.accountId;
     _accounts = _service.accountChanges.listen((owner) {
       if (!mounted || owner == _owner) return;
@@ -46,6 +57,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _loadVersion++;
       setState(() {
         _owner = owner;
+        _activeTab = 0;
+        _calendarTab = null;
+        _tasksTab = null;
         _snapshot = const HomeSnapshot.empty();
         _hasSnapshot = false;
         _selectedUpcomingDate = null;
@@ -80,6 +94,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _accounts?.cancel();
     studyDataRevision.removeListener(_dataChanged);
     learningStore.removeListener(_learningChanged);
+    notificationReads.removeListener(_learningChanged);
+    _notificationClock?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -90,6 +106,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       final data = await _service.loadSnapshot();
       await learningStore.load();
+      await notificationReads.load(_owner);
       if (mounted && version == _loadVersion) {
         setState(() {
           _snapshot = data;
@@ -115,6 +132,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _open(Widget screen) async {
+    if (screen is TasksScreen) {
+      assistantDialog.value = false;
+      setState(() {
+        _activeTab = 2;
+        _tasksTab ??= const TasksScreen(embedded: true);
+      });
+      return;
+    }
+    if (screen is ViewScheduleScreen) {
+      assistantDialog.value = false;
+      setState(() {
+        _activeTab = 1;
+        _calendarTab = ViewScheduleScreen(
+          key: UniqueKey(),
+          embedded: true,
+          initialDate: screen.initialDate,
+          openEditorOnStart: screen.openEditorOnStart,
+        );
+      });
+      return;
+    }
     final reduced = MediaQuery.disableAnimationsOf(context);
     await Navigator.push<void>(
         context,
@@ -138,69 +176,109 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _header() {
+    final notificationNow = DateTime.now();
+    final unreadCount =
+        StudyNotification.fromSnapshot(_snapshot, notificationNow)
+            .where((item) =>
+                (item.isDue(notificationNow) ||
+                    item.start.isAfter(notificationNow)) &&
+                !notificationReads.isRead(_owner, item.key))
+            .length;
     final name = _snapshot.username?.trim().isNotEmpty == true
         ? _snapshot.username!.trim()
         : (_service.accountName ?? '');
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final words =
+        name.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    final initials = words.isEmpty
+        ? 'B'
+        : words
+            .skip(words.length > 1 ? words.length - 2 : 0)
+            .map((word) => word.characters.first)
+            .join()
+            .toUpperCase();
+    final hour = DateTime.now().hour;
+    final greeting = hour >= 5 && hour < 11
+        ? 'Chào buổi sáng'
+        : hour >= 11 && hour < 14
+            ? 'Chào buổi trưa'
+            : hour >= 14 && hour < 18
+                ? 'Chào buổi chiều'
+                : hour >= 18 && hour < 22
+                    ? 'Chào buổi tối'
+                    : 'Chào buổi đêm';
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-            colors: [Color(0xFF6254D9), Color(0xFF8372ED)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight),
-        borderRadius: BorderRadius.circular(26),
-        boxShadow: [
-          BoxShadow(
-              color: const Color(0xFF6254D9).withValues(alpha: .16),
-              blurRadius: 24,
-              offset: const Offset(0, 10))
-        ],
+        color: dark ? const Color(0xFF23212E) : const Color(0xFFF7F6FB),
+        borderRadius: BorderRadius.circular(24),
       ),
-      child: LayoutBuilder(builder: (context, box) {
-        final compact = box.maxWidth < 500;
-        final controls = Row(mainAxisSize: MainAxisSize.min, children: [
-          IconButton(
-              key: const ValueKey('home-reminders'),
-              tooltip: 'Nhắc nhở',
-              onPressed: () => _open(const ScheduleAnnouncementScreen()),
-              icon: const Icon(Icons.notifications_none_rounded,
-                  color: Colors.white)),
-          IconButton(
-              tooltip: 'Tài khoản',
-              onPressed: () => _open(const AccountScreen()),
-              icon: const Icon(Icons.account_circle_outlined,
-                  color: Colors.white)),
-        ]);
-        const eyebrow = Text('GÓC HỌC TẬP CỦA BẠN',
-            style: TextStyle(
-                color: Colors.white70,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 1.2));
-        final welcome =
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (!compact) ...[eyebrow, const SizedBox(height: 10)],
-          Text(name.isEmpty ? 'Xin chào!' : 'Xin chào, $name',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: compact ? 24 : 26,
-                  fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          Text(DateFormat('EEEE, dd/MM/yyyy', 'vi_VN').format(DateTime.now()),
-              style: const TextStyle(color: Colors.white70, fontSize: 13)),
-        ]);
-        return compact
-            ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Row(children: [const Expanded(child: eyebrow), controls]),
-                const SizedBox(height: 8),
-                welcome
-              ])
-            : Row(children: [
-                Expanded(child: welcome),
-                const SizedBox(width: 12),
-                controls
-              ]);
-      }),
+      child: Row(children: [
+        Tooltip(
+          message: 'Tài khoản',
+          child: Material(
+            color: dark ? const Color(0xFF37304F) : const Color(0xFFEEE9FF),
+            borderRadius: BorderRadius.circular(20),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () => _open(const AccountScreen()),
+              child: Semantics(
+                button: true,
+                label: 'Tài khoản',
+                child: SizedBox(
+                  width: 64,
+                  height: 64,
+                  child: Center(
+                      child: Text(initials,
+                          style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: dark
+                                  ? const Color(0xFFC1B2FF)
+                                  : const Color(0xFF6950E8)))),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 18),
+        Expanded(
+            child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(greeting,
+                style: TextStyle(
+                    fontSize: 16,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 8),
+            Text(name.isEmpty ? 'Bạn học' : name,
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: Theme.of(context).colorScheme.onSurface)),
+          ],
+        )),
+        const SizedBox(width: 12),
+        IconButton.outlined(
+            key: const ValueKey('home-notifications'),
+            tooltip: 'Thông báo',
+            onPressed: () => _open(NotificationsScreen(service: _service)),
+            style: IconButton.styleFrom(
+                backgroundColor: dark ? const Color(0xFF2C2938) : Colors.white,
+                foregroundColor: Theme.of(context).colorScheme.onSurface,
+                side: BorderSide(
+                    color: dark
+                        ? const Color(0xFF454052)
+                        : const Color(0xFFE9E5F3)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18)),
+                minimumSize: const Size(52, 54)),
+            icon: Badge(
+                key: const ValueKey('home-unread-notifications'),
+                isLabelVisible: unreadCount > 0,
+                label: Text(unreadCount > 99 ? '99+' : '$unreadCount'),
+                child: const Icon(Icons.notifications_none_rounded, size: 22))),
+      ]),
     );
   }
 
@@ -409,6 +487,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               const SubjectManagementScreen()),
           const Divider(height: 1, indent: 56, endIndent: 16),
           _tool(Icons.insights_rounded, 'Thống kê', const StatisticalScreen()),
+          const Divider(height: 1, indent: 56, endIndent: 16),
+          _tool(Icons.alarm_rounded, 'Nhắc nhở',
+              const ScheduleAnnouncementScreen()),
         ])),
       ]);
   @override
@@ -416,110 +497,134 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         backgroundColor: Theme.of(context).brightness == Brightness.dark
             ? const Color(0xFF11131D)
             : const Color(0xFFF5F6FB),
-        body: SafeArea(
-            child: LayoutBuilder(
-                builder: (context, viewport) => ScrollConfiguration(
-                      behavior: const MaterialScrollBehavior()
-                          .copyWith(dragDevices: const {
-                        PointerDeviceKind.mouse,
-                        PointerDeviceKind.touch,
-                        PointerDeviceKind.trackpad,
-                        PointerDeviceKind.stylus
-                      }),
-                      child: RefreshIndicator(
-                        onRefresh: () => _load(showLoader: false),
-                        child: ListView(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.all(20),
-                            children: [
-                              Center(
-                                  child: ConstrainedBox(
-                                key: const ValueKey('home-content'),
-                                constraints:
-                                    const BoxConstraints(maxWidth: 1040),
-                                child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      _header(),
-                                      const SizedBox(height: 16),
-                                      const SizedBox(height: 20),
-                                      Align(
-                                          alignment: Alignment.centerLeft,
-                                          child: FilledButton.icon(
-                                              key: const ValueKey(
-                                                  'home-add-lesson'),
-                                              onPressed: () => _open(
-                                                  const ViewScheduleScreen(
-                                                      openEditorOnStart: true)),
-                                              icon: const Icon(Icons.add),
-                                              label:
-                                                  const Text('Thêm lịch học'))),
-                                      const SizedBox(height: 20),
-                                      if (_failed ||
-                                          _snapshot.loadWarnings.isNotEmpty)
-                                        Padding(
-                                            padding: const EdgeInsets.only(
-                                                bottom: 16),
-                                            child: Row(children: [
-                                              Expanded(
-                                                  child: Text(_failed
-                                                      ? (_hasSnapshot
-                                                          ? 'Chưa cập nhật được lịch. Đang hiển thị dữ liệu gần nhất.'
-                                                          : 'Không tải được lịch. Vui lòng thử lại.')
-                                                      : _snapshot.loadWarnings
-                                                          .join(' '))),
-                                              TextButton(
-                                                  onPressed: () => _load(),
-                                                  child: const Text('Thử lại')),
-                                            ])),
-                                      if (_loading)
-                                        const SizedBox(
-                                            height: 160,
-                                            child: Center(
-                                                child:
-                                                    CircularProgressIndicator()))
-                                      else if (_failed && !_hasSnapshot) ...[
-                                        _surface(const Padding(
-                                            padding: EdgeInsets.all(24),
-                                            child: Column(children: [
-                                              Icon(Icons.cloud_off_outlined,
-                                                  size: 36),
-                                              SizedBox(height: 12),
-                                              Text(
-                                                  'Chưa xác định được lịch hôm nay'),
-                                              SizedBox(height: 6),
-                                              Text(
-                                                  'Tải lại dữ liệu để xem lịch chính xác.',
-                                                  textAlign: TextAlign.center)
-                                            ]))),
-                                        const SizedBox(height: 24),
-                                        _tools(),
-                                      ] else if (viewport.maxWidth >= 850)
-                                        Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Expanded(
-                                                  flex: 2, child: _agenda()),
-                                              const SizedBox(width: 32),
-                                              Expanded(
-                                                  child: Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                              top: 12),
-                                                      child: _tools())),
-                                            ])
-                                      else ...[
-                                        _agenda(),
-                                        const SizedBox(height: 28),
-                                        _tools()
-                                      ],
-                                    ]),
-                              ))
-                            ]),
-                      ),
-                    ))),
+        body: ValueListenableBuilder<bool>(
+          valueListenable: assistantDialog,
+          builder: (context, chatOpen, home) => IndexedStack(
+            index: chatOpen ? 3 : _activeTab,
+            children: [
+              home!,
+              _calendarTab ?? const SizedBox.shrink(),
+              _tasksTab ?? const SizedBox.shrink(),
+              if (chatOpen)
+                SafeArea(
+                    child: Center(
+                        child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 820),
+                            child: const AssistantChatPage())))
+              else
+                const SizedBox.shrink(),
+            ],
+          ),
+          child: SafeArea(
+              child: LayoutBuilder(
+                  builder: (context, viewport) => ScrollConfiguration(
+                        behavior: const MaterialScrollBehavior()
+                            .copyWith(dragDevices: const {
+                          PointerDeviceKind.mouse,
+                          PointerDeviceKind.touch,
+                          PointerDeviceKind.trackpad,
+                          PointerDeviceKind.stylus
+                        }),
+                        child: RefreshIndicator(
+                          onRefresh: () async {
+                            await learningStore.refresh();
+                            await _load(showLoader: false);
+                          },
+                          child: ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.all(20),
+                              children: [
+                                Center(
+                                    child: ConstrainedBox(
+                                  key: const ValueKey('home-content'),
+                                  constraints:
+                                      const BoxConstraints(maxWidth: 1040),
+                                  child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        _header(),
+                                        const SizedBox(height: 16),
+                                        const SizedBox(height: 20),
+                                        Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: FilledButton.icon(
+                                                key: const ValueKey(
+                                                    'home-add-lesson'),
+                                                onPressed: () => _open(
+                                                    const ViewScheduleScreen(
+                                                        openEditorOnStart:
+                                                            true)),
+                                                icon: const Icon(Icons.add),
+                                                label: const Text(
+                                                    'Thêm lịch học'))),
+                                        const SizedBox(height: 20),
+                                        if (_failed ||
+                                            _snapshot.loadWarnings.isNotEmpty)
+                                          Padding(
+                                              padding: const EdgeInsets.only(
+                                                  bottom: 16),
+                                              child: Row(children: [
+                                                Expanded(
+                                                    child: Text(_failed
+                                                        ? (_hasSnapshot
+                                                            ? 'Chưa cập nhật được lịch. Đang hiển thị dữ liệu gần nhất.'
+                                                            : 'Không tải được lịch. Vui lòng thử lại.')
+                                                        : _snapshot.loadWarnings
+                                                            .join(' '))),
+                                                TextButton(
+                                                    onPressed: () => _load(),
+                                                    child:
+                                                        const Text('Thử lại')),
+                                              ])),
+                                        if (_loading)
+                                          const SizedBox(
+                                              height: 160,
+                                              child: Center(
+                                                  child:
+                                                      CircularProgressIndicator()))
+                                        else if (_failed && !_hasSnapshot) ...[
+                                          _surface(const Padding(
+                                              padding: EdgeInsets.all(24),
+                                              child: Column(children: [
+                                                Icon(Icons.cloud_off_outlined,
+                                                    size: 36),
+                                                SizedBox(height: 12),
+                                                Text(
+                                                    'Chưa xác định được lịch hôm nay'),
+                                                SizedBox(height: 6),
+                                                Text(
+                                                    'Tải lại dữ liệu để xem lịch chính xác.',
+                                                    textAlign: TextAlign.center)
+                                              ]))),
+                                          const SizedBox(height: 24),
+                                          _tools(),
+                                        ] else if (viewport.maxWidth >= 850)
+                                          Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Expanded(
+                                                    flex: 2, child: _agenda()),
+                                                const SizedBox(width: 32),
+                                                Expanded(
+                                                    child: Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(top: 12),
+                                                        child: _tools())),
+                                              ])
+                                        else ...[
+                                          _agenda(),
+                                          const SizedBox(height: 28),
+                                          _tools()
+                                        ],
+                                      ]),
+                                ))
+                              ]),
+                        ),
+                      ))),
+        ),
         bottomNavigationBar: SafeArea(
           top: false,
           child: Padding(
@@ -530,21 +635,33 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       valueListenable: assistantDialog,
                       builder: (context, chatOpen, _) => NavigationBar(
                             height: 76,
-                            selectedIndex: chatOpen ? 3 : 0,
+                            selectedIndex: chatOpen ? 3 : _activeTab,
                             onDestinationSelected: (index) {
                               if (index == 3) {
                                 assistantDialog.value = true;
                                 return;
                               }
+                              assistantDialog.value = false;
+                              if (index == 1) {
+                                setState(() {
+                                  _activeTab = 1;
+                                  _calendarTab ??=
+                                      const ViewScheduleScreen(embedded: true);
+                                });
+                                return;
+                              }
                               if (index == 0) {
+                                setState(() => _activeTab = 0);
                                 _load(showLoader: false);
                                 return;
                               }
-                              _open(index == 1
-                                  ? const ViewScheduleScreen()
-                                  : index == 2
-                                      ? const TasksScreen()
-                                      : const SettingsScreen());
+                              if (index == 2) {
+                                _open(const TasksScreen());
+                                return;
+                              }
+                              _open(index == 2
+                                  ? const TasksScreen()
+                                  : const SettingsScreen());
                             },
                             destinations: const [
                               NavigationDestination(

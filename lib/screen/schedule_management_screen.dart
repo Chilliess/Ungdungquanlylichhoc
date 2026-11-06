@@ -1,3 +1,4 @@
+import '../services/calendar_conflicts.dart';
 import '../services/study_data.dart';
 import 'package:untitled/widgets/app_notice.dart';
 import 'confirm_action.dart';
@@ -788,6 +789,39 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
                     final lecturer = lecturerController.text.trim();
 
                     try {
+                      // Check every group before writing any of them, including exams.
+                      for (final group in sessionGroups) {
+                        if (!context.mounted) return;
+                        if (!await confirmCalendarConflicts(
+                            context,
+                            supabase,
+                            {
+                              'start_date': DateFormat('yyyy-MM-dd')
+                                  .format(group.startDate),
+                              'end_date': DateFormat('yyyy-MM-dd')
+                                  .format(group.endDate),
+                              'day_of_week': group.daysOfWeek.toList(),
+                              'recurrence': isEditing &&
+                                      ['daily', 'monthly', 'yearly']
+                                          .contains(schedule['recurrence'])
+                                  ? schedule['recurrence']
+                                  : (group.startDate == group.endDate
+                                      ? 'none'
+                                      : 'weekly'),
+                              'start_time':
+                                  '${group.startTime.hour.toString().padLeft(2, '0')}:${group.startTime.minute.toString().padLeft(2, '0')}',
+                              'end_time':
+                                  '${group.endTime.hour.toString().padLeft(2, '0')}:${group.endTime.minute.toString().padLeft(2, '0')}',
+                            },
+                            excludeId:
+                                isEditing ? schedule['id'].toString() : null)) {
+                          return;
+                        }
+                      }
+                      if (!context.mounted ||
+                          supabase.auth.currentUser?.id != userId) {
+                        return;
+                      }
                       if (isEditing) {
                         final group = sessionGroups.first;
                         final formattedStartTime =
@@ -1050,6 +1084,19 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen>
                         '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}:00';
 
                     try {
+                      if (!await confirmCalendarConflicts(
+                          context,
+                          supabase,
+                          {
+                            'start_date': formattedDate,
+                            'end_date': formattedDate,
+                            'recurrence': 'none',
+                            'start_time': formattedStartTime,
+                            'end_time': formattedEndTime,
+                          },
+                          isExam: true)) {
+                        return;
+                      }
                       await supabase.from('schedule_exams').insert({
                         'user_id': userId,
                         'subject_id': selectedSubjectId,

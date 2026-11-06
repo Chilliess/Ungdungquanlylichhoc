@@ -189,11 +189,18 @@ BEGIN
         btrim(p_title), '#6750A4');
   END IF;
   IF p_is_exam THEN
-    IF p_id IS NULL THEN RAISE EXCEPTION 'Chỉ tạo lịch học tại đây'; END IF;
-    UPDATE public.schedule_exams SET subject_id = subject_uuid, exam_date = p_date,
-      start_time = p_start, end_time = p_end, room = btrim(p_room),
-      notes = btrim(coalesce(p_notes, '')), category = btrim(coalesce(p_category, ''))
-      WHERE id = p_id AND user_id = owner_id RETURNING id INTO result_id;
+    IF p_id IS NULL THEN
+      INSERT INTO public.schedule_exams(user_id, subject_id, exam_date,
+        start_time, end_time, room, notes, category)
+      VALUES(owner_id, subject_uuid, p_date, p_start, p_end, btrim(p_room),
+        btrim(coalesce(p_notes, '')), btrim(coalesce(p_category, '')))
+      RETURNING id INTO result_id;
+    ELSE
+      UPDATE public.schedule_exams SET subject_id = subject_uuid, exam_date = p_date,
+        start_time = p_start, end_time = p_end, room = btrim(p_room),
+        notes = btrim(coalesce(p_notes, '')), category = btrim(coalesce(p_category, ''))
+        WHERE id = p_id AND user_id = owner_id RETURNING id INTO result_id;
+    END IF;
   ELSIF p_id IS NULL THEN
     INSERT INTO public.schedules(user_id, subject_id, room, day_of_week,
       start_time, end_time, start_date, end_date, notes, category)
@@ -223,6 +230,8 @@ REVOKE ALL ON FUNCTION public.save_calendar_lesson(text,date,time,time,text,text
 GRANT EXECUTE ON FUNCTION public.save_calendar_lesson(text,date,time,time,text,text,text,uuid,boolean,date) TO authenticated;
 NOTIFY pgrst, 'reload schema';
 COMMIT;
+
+
 
 -- ==========================================
 -- 8. DANH SÁCH THẺ PHÂN LOẠI THEO TÀI KHOẢN
@@ -491,11 +500,18 @@ BEGIN
         btrim(p_title), '#6750A4');
   END IF;
   IF p_is_exam THEN
-    IF p_id IS NULL THEN RAISE EXCEPTION 'Chỉ tạo lịch học tại đây'; END IF;
-    UPDATE public.schedule_exams SET subject_id = subject_uuid, exam_date = p_date,
-      start_time = p_start, end_time = p_end, room = btrim(p_room),
-      notes = btrim(coalesce(p_notes, '')), category = btrim(coalesce(p_category, ''))
-      WHERE id = p_id AND user_id = owner_id RETURNING id INTO result_id;
+    IF p_id IS NULL THEN
+      INSERT INTO public.schedule_exams(user_id, subject_id, exam_date,
+        start_time, end_time, room, notes, category)
+      VALUES(owner_id, subject_uuid, p_date, p_start, p_end, btrim(p_room),
+        btrim(coalesce(p_notes, '')), btrim(coalesce(p_category, '')))
+      RETURNING id INTO result_id;
+    ELSE
+      UPDATE public.schedule_exams SET subject_id = subject_uuid, exam_date = p_date,
+        start_time = p_start, end_time = p_end, room = btrim(p_room),
+        notes = btrim(coalesce(p_notes, '')), category = btrim(coalesce(p_category, ''))
+        WHERE id = p_id AND user_id = owner_id RETURNING id INTO result_id;
+    END IF;
   ELSIF p_id IS NULL THEN
     INSERT INTO public.schedules(user_id, subject_id, room, day_of_week,
       start_time, end_time, start_date, end_date, notes, category)
@@ -1122,5 +1138,303 @@ UPDATE public.profiles p SET username = coalesce(
   nullif(btrim(u.raw_user_meta_data->>'full_name'), ''),
   nullif(btrim(u.raw_user_meta_data->>'name'), ''), nullif(split_part(u.email, '@', 1), ''))
 FROM auth.users u WHERE p.id = u.id AND nullif(btrim(p.username), '') IS NULL;
+NOTIFY pgrst, 'reload schema';
+COMMIT;
+
+-- AI_CALENDAR_ACTIONS: apply one reviewed chat action atomically and only once.
+BEGIN;
+CREATE TABLE IF NOT EXISTS public.assistant_calendar_actions (
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  request_id uuid NOT NULL,
+  action jsonb NOT NULL,
+  result_id uuid,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(user_id, request_id)
+);
+ALTER TABLE public.assistant_calendar_actions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS assistant_actions_owner ON public.assistant_calendar_actions;
+CREATE POLICY assistant_actions_owner ON public.assistant_calendar_actions FOR ALL
+  USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+REVOKE ALL ON public.assistant_calendar_actions FROM anon;
+GRANT SELECT, INSERT, UPDATE ON public.assistant_calendar_actions TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.apply_assistant_calendar_action(p_request_id uuid, p_action jsonb)
+RETURNS uuid LANGUAGE plpgsql SECURITY INVOKER SET search_path = public AS $$
+DECLARE
+  owner_id uuid := auth.uid();
+  receipt public.assistant_calendar_actions%ROWTYPE;
+  target_id uuid;
+  subject_uuid uuid;
+  day date;
+  starts time;
+  ends time;
+BEGIN
+  IF owner_id IS NULL OR NOT public.account_is_active() THEN RAISE EXCEPTION 'Tài khoản không khả dụng'; END IF;
+  IF p_request_id IS NULL OR p_action IS NULL OR jsonb_typeof(p_action) <> 'object' OR
+    coalesce(p_action->>'operation','') NOT IN ('create','delete') OR
+    coalesce(p_action->>'kind','') NOT IN ('class','exam') OR
+    nullif(btrim(p_action->>'title'),'') IS NULL OR length(p_action->>'title') > 200
+    THEN RAISE EXCEPTION 'Thao tác lịch không hợp lệ'; END IF;
+  INSERT INTO public.assistant_calendar_actions(user_id,request_id,action)
+    VALUES(owner_id,p_request_id,p_action) ON CONFLICT DO NOTHING;
+  SELECT * INTO receipt FROM public.assistant_calendar_actions
+    WHERE user_id=owner_id AND request_id=p_request_id FOR UPDATE;
+  IF receipt.action IS DISTINCT FROM p_action THEN RAISE EXCEPTION 'Mã yêu cầu đã dùng'; END IF;
+  IF receipt.result_id IS NOT NULL THEN RETURN receipt.result_id; END IF;
+  day := (p_action->>'date')::date;
+  starts := (p_action->>'start')::time;
+  ends := (p_action->>'end')::time;
+  IF day IS NULL OR day < DATE '2020-01-01' OR day > DATE '2100-12-31' OR
+    starts IS NULL OR ends IS NULL OR ends <= starts THEN RAISE EXCEPTION 'Ngày hoặc giờ không hợp lệ'; END IF;
+  IF p_action->>'operation' = 'delete' THEN
+    target_id := (p_action->>'id')::uuid;
+    IF p_action->>'kind' = 'exam' THEN
+      DELETE FROM public.schedule_exams e USING public.subjects s WHERE e.id=target_id AND
+        e.user_id=owner_id AND s.id=e.subject_id AND s.user_id=owner_id AND
+        s.subject_name=p_action->>'title' AND e.exam_date=day AND e.start_time=starts AND e.end_time=ends;
+    ELSE
+      DELETE FROM public.schedules e USING public.subjects s WHERE e.id=target_id AND
+        e.user_id=owner_id AND s.id=e.subject_id AND s.user_id=owner_id AND
+        s.subject_name=p_action->>'title' AND e.start_time=starts AND e.end_time=ends;
+    END IF;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Lịch đã thay đổi hoặc không thuộc tài khoản'; END IF;
+  ELSE
+    IF nullif(btrim(p_action->>'room'),'') IS NULL OR length(p_action->>'room') > 200 THEN
+      RAISE EXCEPTION 'Thiếu phòng học'; END IF;
+    IF p_action->>'kind' = 'class' THEN
+      target_id := public.save_subject_schedule(NULL,NULL,p_action->>'title',day,
+        starts,ends,p_action->>'room','','','none',NULL);
+    ELSE
+      SELECT id INTO subject_uuid FROM public.subjects WHERE user_id=owner_id
+        AND lower(btrim(subject_name))=lower(btrim(p_action->>'title')) ORDER BY created_at,id LIMIT 1;
+      IF subject_uuid IS NULL THEN
+        subject_uuid := gen_random_uuid();
+        INSERT INTO public.subjects(id,user_id,subject_code,subject_name,color_code)
+          VALUES(subject_uuid,owner_id,'AUTO-'||replace(subject_uuid::text,'-',''),btrim(p_action->>'title'),'#6750A4');
+      END IF;
+      INSERT INTO public.schedule_exams(user_id,subject_id,exam_date,start_time,end_time,room)
+        VALUES(owner_id,subject_uuid,day,starts,ends,btrim(p_action->>'room')) RETURNING id INTO target_id;
+    END IF;
+  END IF;
+  UPDATE public.assistant_calendar_actions SET result_id=target_id WHERE user_id=owner_id AND request_id=p_request_id;
+  RETURN target_id;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.apply_assistant_calendar_action(uuid,jsonb) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.apply_assistant_calendar_action(uuid,jsonb) TO authenticated;
+NOTIFY pgrst, 'reload schema';
+COMMIT;
+
+-- ACCOUNT_RESTORE_HINT: ordinary sign-ins need no blocking status lookup.
+-- This server-owned Auth hint is for UI routing only; RLS still uses the
+-- account_deletion_requests table and account_is_active(), never this flag.
+BEGIN;
+CREATE OR REPLACE FUNCTION public.sync_account_restore_hint()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  owner_id uuid;
+  metadata_patch jsonb := '{}'::jsonb;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    owner_id := OLD.user_id;
+  ELSE
+    owner_id := NEW.user_id;
+    metadata_patch := jsonb_build_object('account_deletion_pending',true,
+      'account_deletion_at',NEW.delete_at);
+  END IF;
+  UPDATE auth.users SET raw_app_meta_data =
+    (coalesce(raw_app_meta_data,'{}'::jsonb) - 'account_deletion_pending' - 'account_deletion_at') || metadata_patch
+    WHERE id = owner_id;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.sync_account_restore_hint() FROM PUBLIC,anon,authenticated;
+DROP TRIGGER IF EXISTS account_restore_hint_changed ON public.account_deletion_requests;
+CREATE TRIGGER account_restore_hint_changed
+  AFTER INSERT OR UPDATE OR DELETE ON public.account_deletion_requests
+  FOR EACH ROW EXECUTE FUNCTION public.sync_account_restore_hint();
+
+UPDATE auth.users u SET raw_app_meta_data =
+  (coalesce(u.raw_app_meta_data,'{}'::jsonb) - 'account_deletion_pending' - 'account_deletion_at') ||
+  coalesce((SELECT jsonb_build_object('account_deletion_pending',true,'account_deletion_at',r.delete_at)
+    FROM public.account_deletion_requests r WHERE r.user_id=u.id),'{}'::jsonb)
+WHERE coalesce(u.raw_app_meta_data,'{}'::jsonb) ? 'account_deletion_pending'
+  OR EXISTS(SELECT 1 FROM public.account_deletion_requests r WHERE r.user_id=u.id);
+NOTIFY pgrst, 'reload schema';
+COMMIT;
+
+-- WORKSPACE_CLOUD_SYNC: per-account tasks, study sessions and chat history.
+BEGIN;
+CREATE TABLE IF NOT EXISTS public.workspace_items (
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  collection text NOT NULL CHECK (collection IN ('tasks','blocks','logs','settings','chat')),
+  item_id text NOT NULL CHECK (length(item_id) BETWEEN 1 AND 200),
+  payload jsonb,
+  subject_id uuid REFERENCES public.subjects(id) ON DELETE SET NULL,
+  deleted boolean NOT NULL DEFAULT false,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(user_id, collection, item_id),
+  CHECK (deleted OR (jsonb_typeof(payload) = 'object' AND payload IS NOT NULL))
+);
+ALTER TABLE public.workspace_items ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.workspace_items FROM anon, authenticated;
+GRANT SELECT ON public.workspace_items TO authenticated;
+DROP POLICY IF EXISTS "Own active workspace" ON public.workspace_items;
+CREATE POLICY "Own active workspace" ON public.workspace_items FOR SELECT TO authenticated
+  USING (user_id = (select auth.uid()) AND (select public.account_is_active()));
+
+CREATE OR REPLACE FUNCTION public.sync_workspace_items(p_collection text, p_changes jsonb DEFAULT '[]'::jsonb)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  owner_id uuid := auth.uid(); change jsonb; body jsonb; sid uuid; deleted_item boolean;
+BEGIN
+  IF owner_id IS NULL OR NOT public.account_is_active() THEN
+    RAISE EXCEPTION 'Tài khoản không khả dụng';
+  END IF;
+  IF p_collection IS NULL OR p_collection NOT IN ('tasks','blocks','logs','settings','chat')
+    OR p_changes IS NULL OR jsonb_typeof(p_changes) <> 'array' THEN
+    RAISE EXCEPTION 'Dữ liệu đồng bộ không hợp lệ';
+  END IF;
+  IF jsonb_array_length(p_changes) > 100 OR octet_length(p_changes::text) > 4000000 THEN
+    RAISE EXCEPTION 'Gói đồng bộ quá lớn';
+  END IF;
+  FOR change IN SELECT value FROM jsonb_array_elements(p_changes) LOOP
+    IF jsonb_typeof(change) <> 'object' OR coalesce(length(change->>'id'),0) NOT BETWEEN 1 AND 200 THEN
+      RAISE EXCEPTION 'Mã dữ liệu không hợp lệ';
+    END IF;
+    deleted_item := coalesce((change->>'deleted')::boolean, false);
+    body := CASE WHEN deleted_item THEN NULL ELSE change->'payload' END;
+    sid := NULL;
+    IF NOT deleted_item THEN
+      IF body IS NULL OR jsonb_typeof(body) <> 'object' OR octet_length(body::text) > 2000000 THEN
+        RAISE EXCEPTION 'Nội dung không hợp lệ';
+      END IF;
+      body := body || jsonb_build_object('id',change->>'id');
+      IF p_collection = 'tasks' AND nullif(body->>'subjectId','') IS NOT NULL THEN
+        sid := (body->>'subjectId')::uuid;
+        IF NOT EXISTS(SELECT 1 FROM public.subjects WHERE id=sid AND user_id=owner_id) THEN
+          -- Preserve the task if its previously linked subject has been deleted.
+          IF EXISTS(SELECT 1 FROM public.workspace_items w WHERE w.user_id=owner_id
+              AND w.collection='tasks' AND w.item_id=change->>'id'
+              AND w.payload->>'subjectId'=body->>'subjectId') THEN
+            sid := NULL; body := body - 'subjectId';
+          ELSE RAISE EXCEPTION 'Môn học không thuộc tài khoản'; END IF;
+        END IF;
+      END IF;
+    END IF;
+    INSERT INTO public.workspace_items AS w(user_id,collection,item_id,payload,subject_id,deleted)
+    VALUES(owner_id,p_collection,change->>'id',body,sid,deleted_item)
+    ON CONFLICT(user_id,collection,item_id) DO UPDATE
+      SET payload=excluded.payload, subject_id=excluded.subject_id,
+          deleted=excluded.deleted, updated_at=clock_timestamp()
+      WHERE coalesce((change->>'overwrite')::boolean,false);
+  END LOOP;
+  RETURN coalesce((SELECT jsonb_agg(jsonb_build_object('id',item_id,
+    'payload', CASE WHEN collection='tasks' AND NOT deleted THEN
+       (payload - 'subjectId') || jsonb_build_object('subjectId',subject_id) ELSE payload END,
+    'deleted',deleted) ORDER BY item_id)
+    FROM public.workspace_items WHERE user_id=owner_id AND collection=p_collection),'[]'::jsonb);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.sync_workspace_items(text,jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.sync_workspace_items(text,jsonb) TO authenticated;
+NOTIFY pgrst, 'reload schema';
+COMMIT;
+
+-- CALENDAR_EXAM_CREATE_FIX: allow the existing editor RPC to create exams.
+BEGIN;
+CREATE OR REPLACE FUNCTION public.save_calendar_lesson(
+  p_title text, p_date date, p_start time, p_end time, p_room text,
+  p_notes text DEFAULT '', p_category text DEFAULT '',
+  p_id uuid DEFAULT NULL, p_is_exam boolean DEFAULT false,
+  p_occurrence_date date DEFAULT NULL
+) RETURNS uuid LANGUAGE plpgsql SECURITY INVOKER SET search_path = public AS $$
+DECLARE
+  owner_id uuid := auth.uid();
+  subject_uuid uuid;
+  result_id uuid;
+  old_schedule public.schedules%ROWTYPE;
+  date_shift integer;
+BEGIN
+  IF owner_id IS NULL THEN RAISE EXCEPTION 'Vui lòng đăng nhập để lưu lịch'; END IF;
+  IF p_title IS NULL OR btrim(p_title) = '' OR p_room IS NULL OR btrim(p_room) = ''
+     OR p_date IS NULL OR p_start IS NULL OR p_end IS NULL THEN
+    RAISE EXCEPTION 'Vui lòng nhập đủ tên môn, ngày, giờ và địa điểm';
+  END IF;
+  IF p_end <= p_start THEN RAISE EXCEPTION 'Giờ kết thúc phải sau giờ bắt đầu'; END IF;
+  IF p_date < DATE '2020-01-01' OR p_date > DATE '2100-12-31' THEN
+    RAISE EXCEPTION 'Ngày học ngoài phạm vi cho phép';
+  END IF;
+  IF length(coalesce(p_category, '')) > 60 THEN RAISE EXCEPTION 'Nhãn tối đa 60 ký tự'; END IF;
+  IF p_id IS NOT NULL THEN
+    IF p_is_exam THEN
+      PERFORM id FROM public.schedule_exams WHERE id = p_id AND user_id = owner_id FOR UPDATE;
+      IF NOT FOUND THEN RAISE EXCEPTION 'Không tìm thấy lịch kiểm tra'; END IF;
+    ELSE
+      SELECT * INTO old_schedule FROM public.schedules
+        WHERE id = p_id AND user_id = owner_id FOR UPDATE;
+      IF NOT FOUND THEN RAISE EXCEPTION 'Không tìm thấy lịch học'; END IF;
+    END IF;
+  END IF;
+  IF p_id IS NOT NULL THEN
+    IF p_is_exam THEN
+      SELECT subject_id INTO subject_uuid FROM public.schedule_exams WHERE id = p_id AND user_id = owner_id;
+    ELSE
+      subject_uuid := old_schedule.subject_id;
+    END IF;
+    UPDATE public.subjects SET subject_name = btrim(p_title) WHERE id = subject_uuid AND user_id = owner_id;
+  ELSE
+    SELECT id INTO subject_uuid FROM public.subjects
+      WHERE user_id = owner_id AND lower(btrim(subject_name)) = lower(btrim(p_title))
+      ORDER BY created_at, id LIMIT 1;
+  END IF;
+  IF subject_uuid IS NULL THEN
+    -- Reuse the UUID for a non-empty, globally unique automatic subject code.
+    subject_uuid := gen_random_uuid();
+    INSERT INTO public.subjects(id, user_id, subject_code, subject_name, color_code)
+      VALUES(subject_uuid, owner_id, 'AUTO-' || replace(subject_uuid::text, '-', ''),
+        btrim(p_title), '#6750A4');
+  END IF;
+  IF p_is_exam THEN
+    IF p_id IS NULL THEN
+      INSERT INTO public.schedule_exams(user_id, subject_id, exam_date,
+        start_time, end_time, room, notes, category)
+      VALUES(owner_id, subject_uuid, p_date, p_start, p_end, btrim(p_room),
+        btrim(coalesce(p_notes, '')), btrim(coalesce(p_category, '')))
+      RETURNING id INTO result_id;
+    ELSE
+      UPDATE public.schedule_exams SET subject_id = subject_uuid, exam_date = p_date,
+        start_time = p_start, end_time = p_end, room = btrim(p_room),
+        notes = btrim(coalesce(p_notes, '')), category = btrim(coalesce(p_category, ''))
+        WHERE id = p_id AND user_id = owner_id RETURNING id INTO result_id;
+    END IF;
+  ELSIF p_id IS NULL THEN
+    INSERT INTO public.schedules(user_id, subject_id, room, day_of_week,
+      start_time, end_time, start_date, end_date, notes, category)
+      VALUES(owner_id, subject_uuid, btrim(p_room), ARRAY[extract(isodow FROM p_date)::integer + 1],
+      p_start, p_end, p_date, p_date, btrim(coalesce(p_notes, '')), btrim(coalesce(p_category, '')))
+      RETURNING id INTO result_id;
+  ELSE
+    date_shift := p_date - coalesce(p_occurrence_date, old_schedule.start_date, p_date);
+    IF coalesce(old_schedule.start_date, p_date) + date_shift < DATE '2020-01-01'
+       OR coalesce(old_schedule.end_date, p_date) + date_shift > DATE '2100-12-31' THEN
+      RAISE EXCEPTION 'Chuỗi lịch vượt quá phạm vi ngày cho phép';
+    END IF;
+    UPDATE public.schedules SET subject_id = subject_uuid, room = btrim(p_room),
+      start_time = p_start, end_time = p_end,
+      start_date = coalesce(old_schedule.start_date, p_date) + date_shift,
+      end_date = old_schedule.end_date + date_shift,
+      day_of_week = ARRAY(SELECT (((day - 2 + date_shift) % 7 + 7) % 7) + 2
+        FROM unnest(coalesce(old_schedule.day_of_week,
+          ARRAY[extract(isodow FROM coalesce(p_occurrence_date, p_date))::integer + 1])) AS day),
+      notes = btrim(coalesce(p_notes, '')), category = btrim(coalesce(p_category, ''))
+      WHERE id = p_id AND user_id = owner_id RETURNING id INTO result_id;
+  END IF;
+  RETURN result_id;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.save_calendar_lesson(text,date,time,time,text,text,text,uuid,boolean,date) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.save_calendar_lesson(text,date,time,time,text,text,text,uuid,boolean,date) TO authenticated;
 NOTIFY pgrst, 'reload schema';
 COMMIT;

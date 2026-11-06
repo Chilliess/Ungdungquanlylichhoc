@@ -94,6 +94,28 @@ Future<void> _preview(WidgetTester tester, String name) async {
 }
 
 void main() {
+  testWidgets('task tab keeps bottom navigation and hides the home greeting',
+      (tester) async {
+    await tester
+        .pumpWidget(MaterialApp(home: HomeScreen(service: _PreviewService())));
+    await tester.pumpAndSettle();
+    expect(find.text('Nguyễn Minh Anh'), findsOneWidget);
+    await tester.tap(find.descendant(
+        of: find.byType(NavigationBar), matching: find.text('Công việc')));
+    await tester.pumpAndSettle();
+    expect(find.text('Việc cần làm'), findsOneWidget);
+    expect(find.text('Nguyễn Minh Anh'), findsNothing);
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        2);
+    await tester.tap(find.descendant(
+        of: find.byType(NavigationBar), matching: find.text('Trang chủ')));
+    await tester.pumpAndSettle();
+    expect(find.text('Nguyễn Minh Anh'), findsOneWidget);
+    expect(find.text('Việc cần làm'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   setUpAll(() async {
     await initializeDateFormatting('vi_VN');
     SharedPreferences.setMockInitialValues({});
@@ -140,7 +162,7 @@ void main() {
                   child: child!),
               home: HomeScreen(service: _PreviewService()))));
       await tester.pumpAndSettle();
-      expect(find.text('Xin chào, Nguyễn Minh Anh'), findsOneWidget);
+      expect(find.text('Nguyễn Minh Anh'), findsOneWidget);
       expect(find.text('Thống kê'), findsOneWidget);
       expect(
           find.descendant(
@@ -150,6 +172,9 @@ void main() {
       await tester.tap(find.text('Chat AI'));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('assistant-dialog')), findsOneWidget);
+      expect(find.byTooltip('Tài khoản'), findsNothing);
+      expect(find.byKey(const ValueKey('home-notifications')), findsNothing);
+      expect(find.text('Nguyễn Minh Anh'), findsNothing);
       await tester.tap(find.text('Đồng ý và bắt đầu'));
       await tester.pumpAndSettle();
       await tester.enterText(
@@ -157,7 +182,8 @@ void main() {
       await tester.tap(find.byTooltip('Gửi'));
       await tester.pumpAndSettle();
       await _preview(tester, 'chat-desktop');
-      await tester.tap(find.byTooltip('Thu gọn'));
+      expect(find.byIcon(Icons.keyboard_arrow_down), findsNothing);
+      await tester.tap(find.text('Trang chủ'));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('assistant-dialog')), findsNothing);
       await tester.tap(find.byTooltip('Mở trợ lý AI'));
@@ -168,11 +194,25 @@ void main() {
       await tester.tap(find.text('Chat AI'));
       await tester.pumpAndSettle();
       expect(find.text('Giúp tôi ôn thi có kế hoạch.'), findsOneWidget);
-      await tester.tap(find.byTooltip('Thu gọn'));
+      await tester.tap(find.text('Trang chủ'));
       await tester.pumpAndSettle();
       await tester.binding.setSurfaceSize(const Size(390, 844));
       await tester.pumpAndSettle();
       await _preview(tester, 'home-mobile');
+      await tester.tap(find.byTooltip('Mở trợ lý AI'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Lịch sử trò chuyện'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Trò chuyện mới'));
+      await tester.pumpAndSettle();
+      expect(find.text('Trợ lý học tập'), findsOneWidget);
+      expect(find.text('Lên kế hoạch ôn thi'), findsOneWidget);
+      expect(find.text('Chia nhỏ bài tập khó'), findsOneWidget);
+      expect(find.textContaining('Phản hồi mô phỏng'), findsNothing);
+      await _preview(tester, 'mini-ai-mobile');
+      await tester.binding.setSurfaceSize(const Size(1440, 1000));
+      await tester.pumpAndSettle();
+      await _preview(tester, 'mini-ai-desktop');
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     } finally {
@@ -206,8 +246,8 @@ void main() {
     await tester.pumpAndSettle();
     service.older.complete(_RacingService.snapshot('Tên cũ'));
     await tester.pumpAndSettle();
-    expect(find.text('Xin chào, Tên mới'), findsOneWidget);
-    expect(find.text('Xin chào, Tên cũ'), findsNothing);
+    expect(find.text('Tên mới'), findsOneWidget);
+    expect(find.text('Tên cũ'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -226,10 +266,10 @@ void main() {
     // pumpAndSettle while the new account deliberately has an in-flight load.
     await tester.pump();
     await tester.pump();
-    expect(find.text('Xin chào, Tài khoản A'), findsNothing);
+    expect(find.text('Tài khoản A'), findsNothing);
     service.nextAccount.complete(_RacingService.snapshot('Tài khoản B'));
     await tester.pumpAndSettle();
-    expect(find.text('Xin chào, Tài khoản B'), findsOneWidget);
+    expect(find.text('Tài khoản B'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

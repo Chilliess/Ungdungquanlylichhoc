@@ -1,11 +1,11 @@
 {
-    "name": "untitled",
-    "short_name": "untitled",
+    "name": "Quản lý lịch học",
+    "short_name": "Lịch học",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F5F6FB",
+    "theme_color": "#6950E8",
+    "description": "Quản lý lịch học, lịch thi, công việc và kế hoạch tự học với trợ lý AI.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

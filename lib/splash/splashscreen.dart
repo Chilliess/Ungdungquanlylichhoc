@@ -24,8 +24,7 @@ class _SplashscreenState extends State<Splashscreen> {
     }
   }
 
-  Future<void> nextScreen() async {
-    await Future.delayed(const Duration(seconds: 3));
+  void nextScreen() {
     if (!mounted) return;
 
     final client = _supabaseClient;
@@ -42,8 +41,8 @@ class _SplashscreenState extends State<Splashscreen> {
 
   @override
   void initState() {
-    nextScreen();
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => nextScreen());
   }
 
   @override

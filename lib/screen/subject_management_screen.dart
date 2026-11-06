@@ -1,3 +1,4 @@
+import '../services/calendar_conflicts.dart';
 import '../services/study_data.dart';
 import 'package:untitled/widgets/app_notice.dart';
 import 'package:flutter/material.dart';
@@ -127,6 +128,9 @@ class _SubjectManagementScreenState extends State<SubjectManagementScreen> {
             initial: initial,
             manageRecurrence: true,
             categoryStore: _categories,
+            beforeSave: (draft) => confirmCalendarConflicts(
+                context, _client, draft.toConflictRow(),
+                excludeId: schedule?['id']?.toString()),
             onSave: (draft) async {
               try {
                 await _client.rpc('save_subject_schedule',

@@ -1,3 +1,4 @@
+import '../services/calendar_conflicts.dart';
 import '../services/study_data.dart';
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
@@ -5,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'lesson_editor.dart';
 import '../models/schedule_recurrence.dart';
-import 'confirm_action.dart';
 
 class TimetableImportScreen extends StatefulWidget {
   const TimetableImportScreen({super.key});
@@ -101,6 +101,8 @@ class _TimetableImportScreenState extends State<TimetableImportScreen> {
                 location: row['room']?.toString() ?? '',
                 notes: 'Nhập từ $_filename'),
             manageRecurrence: true,
+            beforeSave: (draft) => confirmCalendarConflicts(
+                context, Supabase.instance.client, draft.toConflictRow()),
             onSave: (draft) async {
               final client = Supabase.instance.client;
               final owner = client.auth.currentUser?.id;
@@ -120,18 +122,6 @@ class _TimetableImportScreenState extends State<TimetableImportScreen> {
                     row['subjects']?['subject_name'] == draft.title.trim()) {
                   throw Exception(
                       'Buổi học này đã có trong lịch. Hãy kiểm tra để tránh nhập trùng.');
-                }
-              }
-              final conflicts = rows.any((row) =>
-                  ScheduleRecurrence.occursOn(row, draft.date) &&
-                  start < minutes(row['end_time']) &&
-                  end > minutes(row['start_time']));
-              if (conflicts) {
-                if (!mounted ||
-                    !await confirmAction(context,
-                        message:
-                            'Buổi này trùng giờ một lịch học đã có. Bạn vẫn muốn lưu?')) {
-                  throw Exception('Đã hủy lưu buổi trùng giờ.');
                 }
               }
               await client.rpc('save_subject_schedule',

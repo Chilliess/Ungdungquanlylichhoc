@@ -36,7 +36,11 @@ như một lịch trống. Đây chưa phải cơ chế đồng bộ realtime gi
 
 Thống kê nằm trong Quản lý trên trang chủ. Tab Chat AI và nút robot mở cùng
 một trạng thái hội thoại/lịch sử trên thiết bị theo tài khoản, không tạo hai
-bản chat. Thay đổi này chưa cấp cho AI quyền tự đọc/sửa dữ liệu lịch cá nhân.
+bản chat. Khi người dùng bật "Lịch của tôi" và hỏi về lịch, study-assistant
+chỉ đọc các mục liên quan thuộc tài khoản đã xác thực qua RLS rồi gửi cho Groq;
+AI không thể sửa/xóa lịch. Lịch lặp được kiểm tra theo ngày diễn ra thực tế;
+ngữ cảnh gồm buổi tiếp theo trong 90 ngày tới và lịch thi sắp tới trong cùng
+khoảng thời gian.
 
 Database mới: chạy `../supabase_database.sql` trong Supabase SQL Editor.
 Database đang có: sao lưu, xem schema hiện tại và chỉ chọn các khối transaction

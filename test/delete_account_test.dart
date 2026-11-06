@@ -14,10 +14,17 @@ class FakeLifecycle extends AccountLifecycle {
     'delete_at': '2026-11-11T12:00:00Z'
   };
   int restores = 0, signOuts = 0;
+  int checks = 0;
+  bool needsRestore = true;
   bool fail = false;
+  Future<Map<String, dynamic>>? delayedStatus;
+  @override
+  bool get requiresRestoration => needsRestore;
   @override
   Future<Map<String, dynamic>> status() async {
+    checks++;
     if (fail) throw StateError('offline');
+    if (delayedStatus != null) return delayedStatus!;
     return result;
   }
 
@@ -25,6 +32,7 @@ class FakeLifecycle extends AccountLifecycle {
   Future<Map<String, dynamic>> restore() async {
     restores++;
     result = {'status': 'active'};
+    needsRestore = false;
     return result;
   }
 
@@ -35,6 +43,60 @@ class FakeLifecycle extends AccountLifecycle {
 }
 
 void main() {
+  testWidgets(
+      'normal sign-in enters immediately without status calls or polling',
+      (tester) async {
+    final changes = StreamController<String?>();
+    addTearDown(changes.close);
+    final service = FakeLifecycle()
+      ..needsRestore = false
+      ..result = {'status': 'active'};
+    await tester.pumpWidget(MaterialApp(
+        home: AccountGate(
+            lifecycle: service,
+            initialUserId: 'a',
+            accountChanges: changes.stream,
+            child: const Text('Private app'))));
+    expect(find.text('Private app'), findsOneWidget);
+    expect(find.text('Kiểm tra tài khoản'), findsNothing);
+    expect(service.checks, 0);
+    await tester.pump(const Duration(minutes: 1));
+    accountStatusRefresh.value++;
+    await tester.pump();
+    expect(service.checks, 0);
+    changes.add(null);
+    await tester.pump();
+    changes.add('b');
+    await tester.pump();
+    expect(find.text('Private app'), findsOneWidget);
+    expect(service.checks, 0);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('late deletion response cannot block a different normal account',
+      (tester) async {
+    final changes = StreamController<String?>();
+    addTearDown(changes.close);
+    final late = Completer<Map<String, dynamic>>();
+    final service = FakeLifecycle()..delayedStatus = late.future;
+    await tester.pumpWidget(MaterialApp(
+        home: AccountGate(
+            lifecycle: service,
+            initialUserId: 'a',
+            accountChanges: changes.stream,
+            child: const Text('Private app'))));
+    expect(find.text('Private app'), findsNothing);
+    service.needsRestore = false;
+    changes.add('b');
+    await tester.pump();
+    expect(find.text('Private app'), findsOneWidget);
+    late.complete({'status': 'pending', 'delete_at': '2026-11-12T12:00:00Z'});
+    await tester.pumpAndSettle();
+    expect(find.text('Private app'), findsOneWidget);
+    expect(find.text('Khôi phục tài khoản?'), findsNothing);
+    expect(service.checks, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
     await Supabase.initialize(url: 'http://127.0.0.1:54321', anonKey: 'test');

@@ -1,9 +1,11 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
+#include <shlobj.h>
 
 #include "flutter_window.h"
 #include "utils.h"
+#include "legacy_preferences.h"
 
 namespace {
 
@@ -69,6 +71,21 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Initialize COM, so that it is available for use in the library and/or
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+
+  PWSTR roaming = nullptr;
+  if (FAILED(::SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr,
+                                   &roaming))) {
+    return EXIT_FAILURE;
+  }
+  const bool preferences_ready = MigrateLegacyPreferences(roaming);
+  ::CoTaskMemFree(roaming);
+  if (!preferences_ready) {
+    ::MessageBoxW(nullptr,
+        L"Chưa chuyển được dữ liệu từ bản demo cũ. Dữ liệu gốc vẫn được giữ. "
+        L"Vui lòng đóng ứng dụng và kiểm tra quyền ghi thư mục ứng dụng.",
+        L"Quản lý lịch học", MB_OK | MB_ICONERROR);
+    return EXIT_FAILURE;
+  }
 
   flutter::DartProject project(L"data");
 

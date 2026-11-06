@@ -23,6 +23,19 @@ class LessonDraft {
   final DateTime? repeatUntil;
   final TimeOfDay start, end;
 
+  Map<String, dynamic> toConflictRow() => {
+        'start_date': DateFormat('yyyy-MM-dd').format(date),
+        'end_date': recurrence == 'none'
+            ? DateFormat('yyyy-MM-dd').format(date)
+            : repeatUntil == null
+                ? null
+                : DateFormat('yyyy-MM-dd').format(repeatUntil!),
+        'recurrence': recurrence,
+        'day_of_week': [date.weekday + 1],
+        'start_time': formatTime(start),
+        'end_time': formatTime(end),
+      };
+
   static String formatTime(TimeOfDay time) =>
       '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
 
@@ -66,6 +79,7 @@ class LessonEditor extends StatefulWidget {
       {super.key,
       required this.initialDate,
       required this.onSave,
+      this.beforeSave,
       this.initial,
       this.dialogTitle,
       this.categoryStore,
@@ -80,6 +94,7 @@ class LessonEditor extends StatefulWidget {
   final LessonCategoryStore? categoryStore;
   final VoidCallback? onCategoriesChanged;
   final Future<void> Function(LessonDraft draft) onSave;
+  final Future<bool> Function(LessonDraft draft)? beforeSave;
 
   @override
   State<LessonEditor> createState() => _LessonEditorState();
@@ -239,7 +254,7 @@ class _LessonEditorState extends State<LessonEditor> {
         return;
       }
       if (!mounted) return;
-      await widget.onSave(LessonDraft(
+      final draft = LessonDraft(
           title: _title.text,
           date: _date,
           start: _start!,
@@ -248,7 +263,10 @@ class _LessonEditorState extends State<LessonEditor> {
           notes: _notes.text,
           category: _category,
           recurrence: _recurrence,
-          repeatUntil: _recurrence == 'none' ? null : _repeatUntil));
+          repeatUntil: _recurrence == 'none' ? null : _repeatUntil);
+      if (widget.beforeSave != null && !await widget.beforeSave!(draft)) return;
+      if (!mounted) return;
+      await widget.onSave(draft);
       studyDataChanged();
       if (mounted) {
         setState(() => _allowClose = true);

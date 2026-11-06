@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'workspace_sync.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -12,23 +13,57 @@ class LearningStore extends ChangeNotifier {
   int goalMinutes = 600;
   Future<void> _writes = Future.value();
   static String key(String owner) => 'learning_workspace_v1_$owner';
-  static String id() => DateTime.now().microsecondsSinceEpoch.toString();
+  static String id() => WorkspaceCollection.newId();
+  int _savedGoal = 600;
 
+  final Map<String, WorkspaceCollection> _collections = {};
+  List<Map<String, dynamic>> subjects = [];
+  bool get cloudSynced =>
+      _collections.isNotEmpty && _collections.values.every((c) => c.synced);
+  String subjectName(Map<String, dynamic> task) {
+    final matches = subjects.where((s) => s['id'] == task['subjectId']);
+    return matches.isNotEmpty
+        ? matches.first['subject_name'].toString()
+        : (task['subject']?.toString().isNotEmpty == true
+            ? task['subject'].toString()
+            : 'Cá nhân');
+  }
+
+  Future<void>? _loading;
+  String? _loadingOwner;
+  int _generation = 0;
   Future<void> load() async {
     final owner = Supabase.instance.client.auth.currentUser?.id;
+    if (_loading != null && _loadingOwner == owner) return _loading!;
+    final pending = _load();
+    _loadingOwner = owner;
+    _loading = pending;
+    try {
+      await pending;
+    } finally {
+      if (identical(_loading, pending)) _loading = null;
+    }
+  }
+
+  Future<void> _load() async {
+    final client = Supabase.instance.client;
+    final owner = client.auth.currentUser?.id;
     if (_loaded && owner == _owner) return;
+    final generation = ++_generation;
     _owner = owner;
     _loaded = false;
+    _collections.clear();
     tasks = [];
     blocks = [];
     logs = [];
+    subjects = [];
     goalMinutes = 600;
     if (owner == null) {
       notifyListeners();
       return;
     }
     final raw = (await SharedPreferences.getInstance()).getString(key(owner));
-    if (_owner != owner) return;
+    if (generation != _generation || _owner != owner) return;
     if (raw != null) {
       final data = jsonDecode(raw) as Map;
       tasks = List<Map<String, dynamic>>.from(data['tasks'] as List);
@@ -36,26 +71,115 @@ class LearningStore extends ChangeNotifier {
       logs = List<Map<String, dynamic>>.from(data['logs'] as List);
       goalMinutes = data['goal'] as int? ?? 600;
     }
+    final seeds = <String, List<Map<String, dynamic>>>{
+      'tasks': tasks, 'blocks': blocks, 'logs': logs,
+      // An untouched default must not overwrite a goal from another device.
+      'settings': raw == null
+          ? []
+          : [
+              {'id': 'goal', 'minutes': goalMinutes}
+            ],
+    };
+    final collections = {
+      for (final name in seeds.keys) name: WorkspaceCollection(owner, name)
+    };
+    final results = await Future.wait(seeds.entries
+        .map((entry) => collections[entry.key]!.load(entry.value)));
+    if (generation != _generation ||
+        _owner != owner ||
+        client.auth.currentUser?.id != owner) {
+      return;
+    }
+    _collections.addAll(collections);
+    tasks = results[0];
+    blocks = results[1];
+    logs = results[2];
+    if (results[3].isNotEmpty) {
+      goalMinutes = results[3].first['minutes'] as int? ?? 600;
+    }
+    try {
+      final rows = await client
+          .from('subjects')
+          .select('id,subject_name,subject_code')
+          .eq('user_id', owner)
+          .order('subject_name');
+      if (generation != _generation ||
+          _owner != owner ||
+          client.auth.currentUser?.id != owner) {
+        return;
+      }
+      subjects = List<Map<String, dynamic>>.from(rows);
+    } catch (_) {/* Tasks remain usable from the device cache. */}
+    if (generation != _generation ||
+        _owner != owner ||
+        client.auth.currentUser?.id != owner) {
+      return;
+    }
     _loaded = true;
+    _savedGoal = goalMinutes;
+    await _cache(owner);
     notifyListeners();
   }
 
+  Future<void> _cache(String owner) async {
+    final encoded = jsonEncode(
+        {'tasks': tasks, 'blocks': blocks, 'logs': logs, 'goal': goalMinutes});
+    if (!await (await SharedPreferences.getInstance())
+        .setString(key(owner), encoded)) {
+      throw StateError('Không lưu được dữ liệu trên thiết bị.');
+    }
+  }
+
+  Future<void> refresh() async {
+    await _writes.catchError((Object _) {});
+    _loaded = false;
+    await load();
+  }
+
   Future<void> save() async {
-    final owner = _owner;
-    if (!_loaded || owner == null ||
+    final owner = _owner, generation = _generation;
+    if (!_loaded ||
+        owner == null ||
         owner != Supabase.instance.client.auth.currentUser?.id) {
       throw StateError('Vui lòng đăng nhập lại.');
     }
-    final encoded = jsonEncode(
-        {'tasks': tasks, 'blocks': blocks, 'logs': logs, 'goal': goalMinutes});
+    final snapshot = jsonDecode(jsonEncode([
+      tasks,
+      blocks,
+      logs,
+      [
+        {'id': 'goal', 'minutes': goalMinutes}
+      ]
+    ])) as List;
+    final goalChanged = goalMinutes != _savedGoal;
+    final collections = Map<String, WorkspaceCollection>.from(_collections);
     _writes = _writes.catchError((_) {}).then((_) async {
-      if (!await (await SharedPreferences.getInstance())
-          .setString(key(owner), encoded)) {
-        throw StateError('Không lưu được dữ liệu trên thiết bị.');
+      if (Supabase.instance.client.auth.currentUser?.id != owner) {
+        throw StateError('Account changed');
       }
+      final names = ['tasks', 'blocks', 'logs', 'settings'];
+      final results = await Future.wait(List.generate(
+          4,
+          (i) => i == 3 && !goalChanged
+              ? collections['settings']!.load([])
+              : collections[names[i]]!
+                  .save(List<Map<String, dynamic>>.from(snapshot[i] as List))));
+      if (generation != _generation ||
+          _owner != owner ||
+          Supabase.instance.client.auth.currentUser?.id != owner) {
+        return;
+      }
+      tasks = results[0];
+      blocks = results[1];
+      logs = results[2];
+      if (results[3].isNotEmpty) {
+        goalMinutes = results[3].first['minutes'] as int? ?? 600;
+      }
+      await _cache(owner);
+      _savedGoal = goalMinutes;
+      notifyListeners();
     });
     await _writes;
-    notifyListeners();
   }
 
   List<Map<String, dynamic>> get pending => tasks
@@ -115,6 +239,7 @@ StudyPlan planStudy(
             'taskId': task['id'],
             'title': task['title'],
             'subject': task['subject'],
+            'subjectId': task['subjectId'],
             'start': cursor.toIso8601String(),
             'end': end.toIso8601String()
           });

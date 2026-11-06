@@ -63,26 +63,65 @@ Flutter để thông báo đồng ý ghi đúng Groq, đọc thông báo trướ
 
 Tư vấn thông thường không bật công cụ ngoài, dùng model trong hạn mức Free Plan.
 Trợ lý được chỉ dẫn hỏi khi thiếu dữ kiện, phân biệt suy luận/đề xuất, không bịa
-nguồn hoặc quy định và không giả vờ đã đọc lịch cá nhân. Hãy đánh giá bằng câu hỏi
-thật; không model nào được bảo đảm trả lời chính xác tuyệt đối.
+nguồn hoặc quy định và không bảo đảm trả lời chính xác tuyệt đối. Khi người dùng
+bật "Lịch của tôi" và hỏi về lịch, Edge Function chỉ đọc các mục liên quan thuộc
+tài khoản đã xác thực qua RLS rồi gửi phần đó cho Groq. AI không được cấp quyền
+sửa/xóa lịch. Lịch lặp được kiểm tra theo ngày diễn ra thực tế; ngữ cảnh gồm
+buổi tiếp theo trong 90 ngày tới và lịch thi sắp tới trong cùng khoảng thời gian.
+Người dùng có thể tắt tùy chọn này bất cứ lúc nào.
 
-Nút "Tra cứu web" là lựa chọn riêng trên app. Backend mặc định chặn tra cứu web
-để tránh tự bật công cụ có chi phí/quyền chưa được xác nhận. Groq hỗ trợ
-browser_search cho GPT-OSS, do Exa cung cấp; tài liệu công cụ chưa xác nhận mọi
-tài khoản Free Plan đều được sử dụng miễn phí. Trước khi bật, kiểm tra quyền,
-giá và Usage của chính tài khoản. Không quảng bá tính năng này là miễn phí vô hạn.
-
-Sau khi đã kiểm tra điều kiện, thêm secret `GROQ_ENABLE_SEARCH=true`. Người dùng
-cũng phải chọn "Tra cứu web"; backend mới gửi browser_search với tool_choice=required.
-Nếu chưa bật secret, app báo rõ và có thể tắt lựa chọn để tiếp tục tư vấn. Không
-tự rơi về câu trả lời không tra cứu khi người dùng đã yêu cầu kiểm chứng trên web.
-Kết quả tra cứu vẫn cần kiểm tra nguồn, ngày và mức phù hợp; model có thể trích dẫn sai.
-
-Hội thoại trước đó được gửi để giữ ngữ cảnh. Khi bật tra cứu, dịch vụ có thể dùng
-ngữ cảnh đó tạo truy vấn gửi tới Exa. Không gửi dữ liệu nhạy cảm. Trợ lý vẫn chưa
-có quyền đọc/sửa bảng lịch hay tài khoản, không có công cụ thực thi mã.
+Tra cứu web đã được bỏ khỏi giao diện. Backend cũng chặn yêu cầu tra cứu từ
+bản app cũ, kể cả khi secret `GROQ_ENABLE_SEARCH` trước đây vẫn còn. Chat không
+kết nối Exa hay công cụ browser search. AI vẫn tư vấn và thao tác lịch theo yêu
+cầu, nhận ảnh và đọc dữ liệu cá nhân khi người dùng bật Lịch cá nhân.
 
 ## 4. Xử lý lỗi
+
+### Thao tác lịch và ảnh trong chat
+
+Trợ lý nhận danh sách tối đa 50 môn trong tài khoản (bao gồm môn chưa có buổi
+học), các lần học/thi thuộc ngày hoặc tuần đang hỏi, và tối đa 30 lần diễn ra
+kế tiếp trong 90 ngày. Mỗi phần có phạm vi và cờ bị giới hạn riêng; không được
+kết luận ngày trống từ danh sách lần học kế tiếp. Lịch lặp được mở thành lần
+diễn ra thực tế trong khoảng đang hỏi. Không truy cập dữ liệu này khi tắt
+**Lịch cá nhân**.
+
+Với chat dài, ngoài các lượt gần nhất, app gửi bổ sung lời nhắn cũ của chính
+người dùng (tối đa 40 mục / 8.000 ký tự JSON), không lấy câu trả lời cũ của AI
+làm dữ kiện. Đây vẫn là ngữ cảnh có giới hạn, không phải bộ nhớ vô hạn hay lịch
+sử đồng bộ giữa thiết bị. Yêu cầu mới nhất được ưu tiên khi thay đổi kế hoạch.
+
+Khi được nhờ lập kế hoạch, AI được hướng dẫn đề xuất môn có thật và cách chia
+giờ, ghi rõ giả định để người dùng kiểm tra, không hỏi lại dữ kiện đã có.
+Giờ 24:00 và buổi qua nửa đêm hiện chưa được lưu; có thể đề xuất kết thúc phiên
+học lúc 23:45 và dành 15 phút cuối nghỉ, nhưng phải nói rõ cách phân bổ này.
+
+Chat có thể đọc lịch của tài khoản khi bật **Lịch của tôi**. Khi yêu cầu tạo/xóa,
+AI trả danh sách đề xuất; người dùng kiểm tra và bấm **Áp dụng** từng mục.
+Xóa lịch lặp sẽ ghi rõ là xóa toàn bộ chuỗi. Tạo mới hiện là từng buổi cụ thể,
+tối đa 20 mục/lần; thiếu ngày, giờ hoặc phòng thì trợ lý phải hỏi lại.
+
+Ảnh PNG/JPEG/WebP tối đa 3 MB: chọn từ nút ảnh hoặc dán Ctrl+V trên trình duyệt.
+Ảnh chỉ gửi trong lượt hiện tại, không ghi vào lịch sử cục bộ; không bật tra cứu
+web cùng lượt ảnh. Dán ảnh clipboard hiện dành cho web; ứng dụng native chọn
+ảnh từ bộ chọn tệp. Vision dùng `GROQ_VISION_MODEL`, mặc định `qwen/qwen3.8-27b`;
+tài khoản Groq cần có quyền/hạn mức model này. Tham khảo
+[Groq Vision](https://console.groq.com/docs/vision).
+
+Áp dụng khối **AI_CALENDAR_ACTIONS** ở cuối `supabase_database.sql` rồi deploy
+`study-assistant` và Flutter Web. RPC mới chạy theo quyền tài khoản (RLS),
+ghi biên nhận cùng giao dịch để thử lại không tạo/xóa trùng. Không dùng service
+role để ghi lịch. Kiểm tra DB bằng `backend/tests/assistant_calendar_db_test.ps1`
+(tạo dữ liệu giả và luôn ROLLBACK).
+
+Lựa chọn "Đồng ý và bắt đầu" được lưu theo tài khoản trong Supabase Auth
+user metadata (`study_assistant_consent_version`, `study_assistant_consent_at`),
+kèm bản lưu cục bộ theo user ID. Tải lại trang hoặc đăng nhập trên trình duyệt
+khác sẽ đọc lại lựa chọn từ tài khoản. Chấp thuận đã lưu cục bộ từ bản cũ được
+đồng bộ khi có mạng. Đây chỉ là tùy chọn người dùng, không dùng để cấp quyền RLS.
+Thay đổi này không cần sửa SQL hay triển khai Edge Function; cần build và cập
+nhật bản Flutter Web lên Cloudflare. Xóa dữ liệu trình duyệt trước khi bản cũ
+được đồng bộ có thể khiến tài khoản phải xác nhận thêm một lần.
 
 | Thông báo | Cần kiểm tra |
 | --- | --- |
@@ -106,8 +145,7 @@ Chatbox giữ toàn bộ hội thoại trong lịch sử cục bộ theo tài kh
 app chọn các lượt trao đổi gần nhất (tối đa 12 tin, nằm trong giới hạn JSON của
 máy chủ), bắt đầu từ câu hỏi của người dùng. Hội thoại quá dài không được gửi
 toàn bộ; hãy nhắc lại chi tiết quan trọng nếu AI cần. Có thể tìm lịch sử theo
-tiêu đề hoặc nội dung, mở lại để hỏi tiếp và sao chép câu trả lời. Chế độ tra cứu
-web được lưu theo cuộc trò chuyện; không tự bật tra cứu cho cuộc chat cũ.
+tiêu đề hoặc nội dung, mở lại để hỏi tiếp và sao chép câu trả lời. Cờ tra cứu web trong lịch sử cũ không còn được sử dụng.
 
 Sau khi cập nhật chỉ dẫn trả lời trong `functions/study-assistant/index.ts`,
 triển khai lại hàm `study-assistant` bằng hướng dẫn triển khai của backend.

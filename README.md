@@ -57,6 +57,7 @@
 - Cấu hình nhắc cho lịch học/lịch kiểm tra; các mốc nhắc gồm 5, 10, 15, 30, 60 và 120 phút trước sự kiện.
 - Tùy chọn giao diện sáng/tối được lưu trên thiết bị.
 - Xem thống kê số buổi và tổng thời lượng theo tuần hoặc tháng, gồm phân tích theo môn và theo ngày. Lịch lặp được tính theo những ngày thực sự diễn ra trong khoảng thống kê.
+- Trợ lý AI có thể đọc các mục lịch liên quan khi người dùng bật tùy chọn **Lịch của tôi**; dữ liệu chỉ đọc, được giới hạn theo tài khoản và gửi tới Groq để trả lời. Lịch lặp được tính theo lần diễn ra tiếp theo trong 90 ngày tới.
 
 ## Luồng sử dụng
 

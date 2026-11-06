@@ -24,7 +24,7 @@ class _AccountGateState extends State<AccountGate> with WidgetsBindingObserver {
   StreamSubscription<String?>? _auth;
   Timer? _timer;
   String? _userId, _error;
-  String _status = 'checking';
+  String _status = 'active';
   DateTime? _deadline;
   bool _busy = false, _checking = false;
   int _version = 0;
@@ -35,6 +35,8 @@ class _AccountGateState extends State<AccountGate> with WidgetsBindingObserver {
     _userId = widget.accountChanges == null
         ? Supabase.instance.client.auth.currentUser?.id
         : widget.initialUserId;
+    _status =
+        _userId != null && _service.requiresRestoration ? 'checking' : 'active';
     _auth = (widget.accountChanges ??
             Supabase.instance.client.auth.onAuthStateChange
                 .map((e) => e.session?.user.id))
@@ -45,15 +47,38 @@ class _AccountGateState extends State<AccountGate> with WidgetsBindingObserver {
         _checking = false;
         setState(() {
           _userId = id;
-          _status = 'checking';
+          _busy = false;
+          _status = id != null && _service.requiresRestoration
+              ? 'checking'
+              : 'active';
+          _deadline = null;
           _error = null;
         });
+      } else if (id != null && !_busy) {
+        final needsRestore = _service.requiresRestoration;
+        if (needsRestore && _status == 'active') {
+          setState(() => _status = 'checking');
+        } else if (!needsRestore && _status != 'active') {
+          setState(() {
+            _status = 'active';
+            _error = null;
+            _deadline = null;
+          });
+        }
       }
+      _configureTimer();
       _check();
     });
     accountStatusRefresh.addListener(_check);
-    _timer = Timer.periodic(const Duration(seconds: 30), (_) => _check());
+    _configureTimer();
     _check();
+  }
+
+  void _configureTimer() {
+    _timer?.cancel();
+    _timer = _userId != null && _status != 'active'
+        ? Timer.periodic(const Duration(seconds: 30), (_) => _check())
+        : null;
   }
 
   @override
@@ -72,6 +97,7 @@ class _AccountGateState extends State<AccountGate> with WidgetsBindingObserver {
 
   Future<void> _check() async {
     if (_userId == null || _checking || _busy) return;
+    if (_status == 'active' && !_service.requiresRestoration) return;
     _checking = true;
     final version = _version;
     try {
@@ -87,6 +113,7 @@ class _AccountGateState extends State<AccountGate> with WidgetsBindingObserver {
             DateTime.tryParse(data['delete_at']?.toString() ?? '')?.toLocal();
         _error = null;
       });
+      _configureTimer();
     } catch (_) {
       if (mounted && version == _version) {
         setState(() {
@@ -110,14 +137,17 @@ class _AccountGateState extends State<AccountGate> with WidgetsBindingObserver {
     try {
       final result = await _service.restore();
       if (result['status'] != 'active') throw const FormatException();
-      if (mounted && version == _version) setState(() => _status = 'active');
+      if (mounted && version == _version) {
+        setState(() => _status = 'active');
+        _configureTimer();
+      }
     } catch (_) {
       if (mounted && version == _version) {
         setState(() => _error =
             'Chưa khôi phục được. Yêu cầu có thể đã hết hạn; hãy kiểm tra lại.');
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && version == _version) setState(() => _busy = false);
     }
     await _check();
   }

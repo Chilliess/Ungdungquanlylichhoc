@@ -22,8 +22,7 @@ void main() {
     expect(find.byType(Splashscreen), findsOneWidget);
     expect(find.byType(FlutterLogo), findsOneWidget);
 
-    // Chờ hết timer chuyển màn (3 giây) để không còn timer pending.
-    await tester.pump(const Duration(seconds: 4));
+    // Navigation starts after the first frame, with no artificial wait.
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
@@ -32,8 +31,7 @@ void main() {
       (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
 
-    // Chưa đăng nhập -> sau 3 giây sẽ tới Loginscreen.
-    await tester.pump(const Duration(seconds: 4));
+    // No fixed three-second delay before showing the login screen.
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
@@ -45,7 +43,6 @@ void main() {
   testWidgets('Màn đăng nhập có nút đăng nhập và liên kết đăng ký',
       (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
-    await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
 
     expect(find.byType(ElevatedButton), findsOneWidget);
