@@ -43,7 +43,7 @@ Tài liệu này mô tả ứng dụng di động, chức năng, kiến trúc, d
 - Tạo, chỉnh sửa và xóa môn học.
 - Lưu mã môn, tên môn và màu nhận diện.
 - Tạo các buổi học với ngày trong tuần, giờ bắt đầu/kết thúc, phòng học, giảng viên và khoảng ngày áp dụng.
-- Chọn nhiều ngày học trong tuần, tìm môn theo tên hoặc mã và kiểm tra một số điều kiện thời gian/xung đột trong luồng biên tập.
+- Mỗi lịch tạo từ giao diện có một ngày bắt đầu và quy tắc lặp (không lặp, hằng ngày, hằng tuần, hằng tháng hoặc hằng năm); lịch hằng tuần lặp theo thứ của ngày bắt đầu. Nhiều thứ trong tuần chỉ được hỗ trợ cho dữ liệu cũ và dữ liệu nhập từ CSV. Có thể tìm môn theo tên hoặc mã; luồng biên tập cũng kiểm tra một số điều kiện thời gian/xung đột.
 - Chỉnh sửa sự kiện từ màn hình lịch; có thể xóa một sự kiện từ phần chi tiết. Với buổi học lặp, thao tác xóa áp dụng cho cả chuỗi lịch.
 - Khi xóa môn học, các lịch học, lịch kiểm tra và nhắc nhở liên quan được dọn theo quy tắc cơ sở dữ liệu.
 
@@ -185,7 +185,7 @@ test/                  # Kiểm thử Flutter
 ### 7.3. Quy tắc lịch
 
 - Các thứ trong tuần được lưu theo quy ước của ứng dụng: Thứ hai = `2`, ..., Thứ bảy = `7`, Chủ nhật = `8`.
-- Lịch tuần dùng tập ngày đã chọn. Quy tắc lặp mới lưu `recurrence` với giá trị `none`, `daily`, `weekly`, `monthly` hoặc `yearly`.
+- Tập nhiều ngày trong tuần chỉ có ở lịch cũ và dữ liệu nhập từ CSV; lịch tạo từ giao diện dùng thứ của ngày bắt đầu. Quy tắc lặp mới lưu `recurrence` với giá trị `none`, `daily`, `weekly`, `monthly` hoặc `yearly`.
 - `end_date` để trống nghĩa là lịch không có ngày kết thúc được đặt trước.
 - Cùng quy tắc lặp được dùng khi dựng lịch, tổng hợp trang chủ và tính thống kê.
 
@@ -311,6 +311,7 @@ Kiểm thử Flutter bao phủ các phần như quy tắc lịch lặp, thống 
 - Xóa tài khoản sau 7 ngày chỉ hoàn tất khi worker/Cron và Vault đã được cấu hình. Chỉ gửi yêu cầu trên ứng dụng không đảm bảo dữ liệu đã được xóa vĩnh viễn khỏi máy chủ.
 - Trợ lý AI và nhập ảnh/PDF cần cấu hình dịch vụ máy chủ; các tính năng này không hoạt động đầy đủ chỉ bằng cách chạy SQL.
 - Chiến lược xử lý xung đột workspace là bản cập nhật sau cùng thắng; chưa có giao diện hợp nhất xung đột.
+- Bản ghi workspace bị xóa được giữ dưới dạng tombstone để đồng bộ việc xóa; hiện chưa có cơ chế dọn tombstone định kỳ.
 - Cấu hình nền tảng mobile hiện dùng mã định danh `com.example.untitled`; cần đổi sang định danh riêng và cập nhật deep link tương ứng trước khi phát hành chính thức.
 - Cấu hình build hiện có dùng debug signing. Gói hiện tại phù hợp cho kiểm thử/cài đặt nội bộ; cần thiết lập khóa ký phát hành riêng và bảo vệ khóa trước khi phân phối chính thức qua cửa hàng ứng dụng.
 - Không commit secret, keystore hoặc mật khẩu ký vào Git.

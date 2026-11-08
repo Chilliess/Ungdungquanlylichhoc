@@ -8,6 +8,7 @@ import 'package:csv/csv.dart';
 import 'dart:convert';
 import '../auth/loginscreen.dart';
 import '../services/app_preferences.dart';
+import '../services/account_lifecycle.dart';
 import 'info_account.dart';
 import 'schedule_announcement.dart';
 
@@ -307,7 +308,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (confirmed == true) {
       try {
-        await _supabase.auth.signOut();
+        await AccountLifecycle().signOut();
         if (mounted) {
           Navigator.pushAndRemoveUntil(
             context,
@@ -466,7 +467,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const Padding(
                               padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
                               child: Text(
-                                  'Chỉ nội dung bạn gửi được chuyển tới dịch vụ AI. Lịch sử lưu riêng theo tài khoản trên thiết bị này. Bạn có thể xem lại và xóa trong cửa sổ trợ lý.')),
+                                  'Chỉ nội dung bạn gửi được chuyển tới dịch vụ AI. Lịch sử chat được lưu trên thiết bị và đồng bộ lên tài khoản Supabase của bạn; ảnh đính kèm không được lưu. Bạn có thể xem lại và xóa trong cửa sổ trợ lý.')),
                         ]),
                         _section('DỮ LIỆU LỊCH HỌC', [
                           ListTile(
