@@ -1,10 +1,10 @@
 # Trợ lý tư vấn bằng Groq Free Plan
 
-Trợ lý hiện dùng `openai/gpt-oss-120b` do Groq phục vụ. Dù model ID có chữ
-`openai`, key cần tạo trên Groq, không phải OpenAI. Không cần credit OpenAI/Gemini.
-Nhập ảnh/PDF vẫn là chức năng riêng dùng OpenAI; đổi trợ lý không làm chức năng
-đó trở thành miễn phí. File SQL chính vẫn là `../supabase_database.sql`;
-thay nhà cung cấp không thay schema hay quota 30 lượt/người/ngày.
+Trợ lý và chức năng nhập ảnh/PDF thời khóa biểu đều dùng Groq. Dù model ID
+`openai/gpt-oss-120b` có chữ `openai`, key cần tạo trên Groq, không phải OpenAI.
+Không cần credit OpenAI/Gemini. File SQL chính vẫn là
+`../supabase_database.sql`; thay nhà cung cấp không thay schema hay quota 30
+lượt/người/ngày.
 
 ## 1. Kiểm tra tài khoản miễn phí trước
 
@@ -39,10 +39,13 @@ Supabase Dashboard → đúng project của app → Edge Functions → Secrets:
 | --- | --- |
 | GROQ_API_KEY | Key từ Groq |
 | GROQ_MODEL | openai/gpt-oss-120b |
+| GROQ_VISION_MODEL | qwen/qwen3.8-27b (tùy chọn; mặc định dùng giá trị này) |
 
 Có thể đổi model thành `openai/gpt-oss-20b` nếu tài khoản cho dùng; backend giới
-hạn vào hai model GPT-OSS này cho câu trả lời văn bản. Tra cứu web đã bị bỏ.
-Các secret Gemini cũ không còn được trợ lý đọc. Thu hồi key Gemini từng bị lộ.
+hạn vào hai model GPT-OSS này cho câu trả lời văn bản. Vision cần model Groq có
+hỗ trợ ảnh; kiểm tra quyền và hạn mức của model trong tài khoản. Tra cứu web đã
+bị bỏ. Các secret Gemini/OpenAI cũ không còn được các chức năng AI đọc; thu hồi
+key từng bị lộ.
 
 Mở Edge Functions → study-assistant → Code, thay toàn bộ index.ts bằng file
 `functions/study-assistant/index.ts` rồi Deploy. Cấu hình gateway của dự án dùng
@@ -52,11 +55,13 @@ Hoặc với Node.js đã cài, từ thư mục gốc:
 
 ```powershell
 npx supabase login
-.\backend\deploy.ps1 -ProjectRef MA_PROJECT_CUA_BAN -Functions study-assistant
+.\backend\deploy.ps1 -ProjectRef MA_PROJECT_CUA_BAN -Functions study-assistant,import-timetable
 ```
 
 Thay MA_PROJECT_CUA_BAN bằng project ref trong URL Dashboard. Rebuild/chạy lại
 Flutter để thông báo đồng ý ghi đúng Groq, đọc thông báo trước khi gửi dữ liệu.
+`import-timetable` dùng cùng key và model vision; PDF được kết xuất trên thiết bị
+thành tối đa 15 ảnh, gửi tối đa 3 ảnh mỗi yêu cầu Groq.
 
 ## 3. Tư vấn và thu thập thông tin
 
@@ -107,6 +112,13 @@ web cùng lượt ảnh. Dán ảnh clipboard hiện dành cho web; ứng dụng
 tài khoản Groq cần có quyền/hạn mức model này. Tham khảo
 [Groq Vision](https://console.groq.com/docs/vision).
 
+Nhập thời khóa biểu nhận PNG/JPEG hoặc PDF tối đa 5 MB và 15 trang. PDF được
+kết xuất thành JPEG trên thiết bị trước khi gửi; các trang được chia thành
+các yêu cầu Groq, tối đa 3 ảnh mỗi yêu cầu. Mỗi tệp nhập tiêu thụ một lượt
+quota của ứng dụng; Groq có hạn mức riêng. Hàm `import-timetable` dùng cùng
+`GROQ_API_KEY` và `GROQ_VISION_MODEL`, không cần secret OpenAI. Mỗi tệp trả tối
+đa 50 buổi để người dùng kiểm tra trước khi lưu.
+
 Áp dụng khối **AI_CALENDAR_ACTIONS** ở cuối `supabase_database.sql` rồi deploy
 `study-assistant` và Flutter Web. RPC mới chạy theo quyền tài khoản (RLS),
 ghi biên nhận cùng giao dịch để thử lại không tạo/xóa trùng. Không dùng service
@@ -151,7 +163,7 @@ triển khai lại hàm `study-assistant` bằng hướng dẫn triển khai c�
 Tra cứu web đã bị chặn trong mã; không cần đặt GROQ_ENABLE_SEARCH hoặc key Exa.
 
 ```powershell
-node --test backend/tests/study_assistant_groq.test.mjs
+node --test backend/tests/study_assistant_groq.test.mjs backend/tests/import_timetable_groq.test.mjs
 .\backend\tests\check_groq_parser_test.ps1
 flutter test test/assistant_overlay_test.dart test/services/assistant_error_test.dart
 ```

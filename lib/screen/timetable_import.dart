@@ -1,11 +1,25 @@
-import '../services/calendar_conflicts.dart';
-import '../services/study_data.dart';
 import 'dart:convert';
+import 'dart:math' as math;
+import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:pdfx/pdfx.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'lesson_editor.dart';
 import '../models/schedule_recurrence.dart';
+import '../services/calendar_conflicts.dart';
+import '../services/study_data.dart';
+
+const _maxPdfPages = 15;
+const _maxImageBytes = 5 * 1024 * 1024;
+
+class _ImportFileException implements Exception {
+  const _ImportFileException(this.message);
+
+  final String message;
+}
 
 class TimetableImportScreen extends StatefulWidget {
   const TimetableImportScreen({super.key});
@@ -25,7 +39,7 @@ class _TimetableImportScreenState extends State<TimetableImportScreen> {
         withData: true);
     if (result == null || !mounted) return;
     final file = result.files.single;
-    if (file.bytes == null || file.size > 5 * 1024 * 1024) {
+    if (file.bytes == null || file.size > _maxImageBytes) {
       setState(() => _error = 'Chọn ảnh hoặc PDF không quá 5 MB.');
       return;
     }
@@ -34,7 +48,7 @@ class _TimetableImportScreenState extends State<TimetableImportScreen> {
         builder: (c) => AlertDialog(
                 title: const Text('Nhận dạng thời khóa biểu'),
                 content: const Text(
-                    'File sẽ được gửi tới dịch vụ OpenAI để đọc lịch. Kết quả cần bạn kiểm tra trước khi lưu.'),
+                    'Ảnh hoặc tối đa 15 trang PDF sẽ được gửi qua máy chủ tới Groq để đọc lịch. PDF được chuyển thành ảnh trên thiết bị. Kết quả cần bạn kiểm tra trước khi lưu.'),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(c, false),
@@ -50,12 +64,17 @@ class _TimetableImportScreenState extends State<TimetableImportScreen> {
       _filename = file.name;
     });
     try {
+      final extension = file.extension?.toLowerCase();
+      final images = extension == 'pdf'
+          ? await _renderPdfPages(file.bytes!)
+          : [
+              {
+                'mime_type': extension == 'png' ? 'image/png' : 'image/jpeg',
+                'data': base64Encode(file.bytes!),
+              }
+            ];
       final response = await Supabase.instance.client.functions
-          .invoke('import-timetable', body: {
-        'filename': file.name,
-        'extension': file.extension?.toLowerCase(),
-        'data': base64Encode(file.bytes!),
-      });
+          .invoke('import-timetable', body: {'images': images});
       final rows =
           List<Map<String, dynamic>>.from(response.data['rows'] as List);
       if (mounted) {
@@ -67,6 +86,8 @@ class _TimetableImportScreenState extends State<TimetableImportScreen> {
           }
         });
       }
+    } on _ImportFileException catch (error) {
+      if (mounted) setState(() => _error = error.message);
     } catch (_) {
       if (mounted) {
         setState(() => _error =
@@ -74,6 +95,59 @@ class _TimetableImportScreenState extends State<TimetableImportScreen> {
       }
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<List<Map<String, String>>> _renderPdfPages(Uint8List bytes) async {
+    PdfDocument? document;
+    try {
+      document = await PdfDocument.openData(bytes);
+      if (document.pagesCount > _maxPdfPages) {
+        throw const _ImportFileException(
+            'PDF có quá 15 trang. Hãy tách file thành nhiều phần rồi nhập lại.');
+      }
+      if (document.pagesCount < 1) {
+        throw const _ImportFileException('PDF không có trang để đọc.');
+      }
+      final images = <Map<String, String>>[];
+      var totalBytes = 0;
+      for (var pageNumber = 1;
+          pageNumber <= document.pagesCount;
+          pageNumber++) {
+        final page = await document.getPage(pageNumber);
+        try {
+          final scale = math.min(1600 / page.width, 1600 / page.height);
+          final image = await page.render(
+            width: math.max(1, page.width * scale),
+            height: math.max(1, page.height * scale),
+            format: PdfPageImageFormat.jpeg,
+            backgroundColor: '#FFFFFF',
+            quality: 75,
+          );
+          if (image == null) {
+            throw const _ImportFileException('Không thể đọc trang PDF.');
+          }
+          totalBytes += image.bytes.length;
+          if (totalBytes > _maxImageBytes) {
+            throw const _ImportFileException(
+                'Ảnh các trang PDF sau khi chuyển đổi vượt quá 5 MB. Hãy dùng PDF ngắn hoặc rõ hơn.');
+          }
+          images.add({
+            'mime_type': 'image/jpeg',
+            'data': base64Encode(image.bytes),
+          });
+        } finally {
+          await page.close();
+        }
+      }
+      return images;
+    } on _ImportFileException {
+      rethrow;
+    } catch (_) {
+      throw const _ImportFileException(
+          'Không thể mở PDF này. Hãy thử lưu lại thành PDF khác.');
+    } finally {
+      await document?.close();
     }
   }
 

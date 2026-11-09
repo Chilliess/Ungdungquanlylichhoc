@@ -9,7 +9,7 @@ Mã máy chủ nằm trong `backend/functions/`; file SQL duy nhất là
 | Hàm | Cấu hình cần thiết | Vai trò |
 | --- | --- | --- |
 | `study-assistant` | `GROQ_API_KEY`, `GROQ_MODEL`; ảnh tùy `GROQ_VISION_MODEL` | Hỏi đáp, đọc lịch liên quan, đề xuất tạo/xóa lịch |
-| `import-timetable` | `OPENAI_API_KEY`, `OPENAI_VISION_MODEL` | Đọc ảnh/PDF tối đa 5 MB, trả tối đa 50 buổi để kiểm tra |
+| `import-timetable` | `GROQ_API_KEY`, tùy chọn `GROQ_VISION_MODEL` | Đọc ảnh hoặc tối đa 15 trang PDF (kết xuất thành ảnh trên thiết bị), trả tối đa 50 buổi để kiểm tra |
 | `delete-account` | Cấu hình Supabase và SQL vòng đời tài khoản | Yêu cầu xóa sau 7 ngày, có xác nhận |
 | `purge-accounts` | Service-role/worker secret theo tài liệu riêng | Xóa tài khoản hết hạn từ tác vụ máy chủ |
 
@@ -56,7 +56,7 @@ người gọi và quyền tài khoản trong mã. Không bỏ các kiểm tra n
 
 ```powershell
 flutter test
-node --test backend/tests/study_assistant_groq.test.mjs
+node --test backend/tests/study_assistant_groq.test.mjs backend/tests/import_timetable_groq.test.mjs
 .\backend\tests\check_groq_parser_test.ps1
 ```
 

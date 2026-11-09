@@ -21,7 +21,7 @@ flutter doctor -v
 flutter pub get
 flutter analyze
 flutter test
-node --test backend/tests/study_assistant_groq.test.mjs
+node --test backend/tests/study_assistant_groq.test.mjs backend/tests/import_timetable_groq.test.mjs
 ```
 
 Thiết lập `JAVA_HOME` hoặc JDK của Flutter trên máy mới nếu cần. Không đặt đường
@@ -100,9 +100,10 @@ dịch vụ đang chạy; chỉ thực hiện khi thực sự muốn cập nhậ
 `supabase/.temp/` được công cụ tạo lại sau đăng nhập/liên kết, không cần commit.
 
 Trợ lý cần `GROQ_API_KEY`, `GROQ_MODEL`; ảnh trong chat tùy cấu hình
-`GROQ_VISION_MODEL`. Nhập ảnh/PDF qua `import-timetable` dùng riêng
-`OPENAI_API_KEY`, `OPENAI_VISION_MODEL`. Các giá trị bí mật đã đặt trên Supabase
-vẫn ở đó sau khi xóa thư mục code; không cần đưa chúng vào Git.
+`GROQ_VISION_MODEL`. Nhập ảnh/PDF qua `import-timetable` cũng dùng
+`GROQ_API_KEY` và vision model này; PDF được kết xuất thành ảnh trên thiết bị
+(tối đa 15 trang, 5 MB). Không cần OpenAI key cho chức năng AI. Các giá trị bí
+mật đã đặt trên Supabase vẫn ở đó sau khi xóa thư mục code; không đưa chúng vào Git.
 
 ## 5. Trước khi xóa bản trên máy
 

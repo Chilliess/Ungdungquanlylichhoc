@@ -7,10 +7,10 @@ Mã máy chủ nằm trong `backend/functions/`. Tên dịch vụ vẫn là Supa
 
 - `../supabase_database.sql`: file SQL duy nhất, chứa bảng, RLS, RPC, index,
   trigger, quota và mục tùy chọn hẹn giờ xóa tài khoản.
-- `functions/`: study-assistant (Groq), import-timetable (OpenAI),
+- `functions/`: study-assistant và import-timetable (Groq),
   delete-account và purge-accounts.
 - `deploy.ps1`: triển khai từ thư mục backend bằng Supabase CLI.
-- `tests/study_assistant_groq.test.mjs`: kiểm tra backend giả lập.
+- `tests/`: kiểm tra backend giả lập cho Groq chat và nhập thời khóa biểu.
 - `GROQ_SETUP.md`: tạo key, kiểm tra Free Plan và thử trợ lý tư vấn.
 - `ASSISTANT_SETUP.md`: cấu hình các chức năng AI và học tập.
 - `ACCOUNT_DELETION_SETUP.md`: thời gian chờ, worker, Vault và Cron.
@@ -87,7 +87,7 @@ không tạo lại thư mục supabase trong dự án. Không chạy lệnh depl
 ## Kiểm tra
 
 ```powershell
-node --test backend/tests/study_assistant_groq.test.mjs
+node --test backend/tests/study_assistant_groq.test.mjs backend/tests/import_timetable_groq.test.mjs
 flutter test test/assistant_overlay_test.dart
 ```
 

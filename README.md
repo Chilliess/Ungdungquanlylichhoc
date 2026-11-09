@@ -80,7 +80,7 @@ Tài liệu này mô tả ứng dụng di động, chức năng, kiến trúc, d
 - Việc tính lịch lặp dựa trên những ngày lịch thực sự diễn ra trong khoảng thống kê.
 - Trợ lý AI có thể trả lời câu hỏi; khi bật **Lịch của tôi**, trợ lý được cung cấp ngữ cảnh lịch của tài khoản để hỗ trợ tư vấn.
 - AI có thể chuẩn bị đề xuất tạo/xóa lịch. Người dùng phải xem xét và bấm **Áp dụng** trước khi thay đổi được ghi vào dữ liệu.
-- Nhập ảnh trong hội thoại cần dịch vụ/model Groq hỗ trợ. Nhập ảnh/PDF từ chức năng nhập lịch cần Edge Function và cấu hình OpenAI riêng.
+- Nhập ảnh trong hội thoại và nhập ảnh/PDF thời khóa biểu đều dùng Groq qua Edge Function. PDF được kết xuất trên thiết bị thành ảnh, tối đa 15 trang mỗi tệp; kết quả cần được kiểm tra trước khi lưu.
 - AI không thực hiện tra cứu web.
 
 ## 5. Luồng sử dụng chính
@@ -219,7 +219,7 @@ flutter pub get
 2. Với database mới, chạy `supabase_database.sql` trong **SQL Editor**. Với database đang sử dụng, đọc `backend/README.md` và chỉ áp dụng các khối cập nhật còn thiếu.
 3. Cấu hình Project URL và publishable key (hoặc anon key) trong phần khởi tạo Supabase của `lib/main.dart`.
 4. Kiểm tra các chính sách RLS và cấu hình Auth trước khi dùng dữ liệu thật.
-5. Chỉ đưa key công khai dành cho client vào ứng dụng. Không đưa `service_role`, mật khẩu database, khóa OpenAI/Groq hoặc secret của Edge Function vào mã Flutter.
+5. Chỉ đưa key công khai dành cho client vào ứng dụng. Không đưa `service_role`, mật khẩu database, khóa Groq hoặc secret của Edge Function vào mã Flutter.
 
 Các luồng cơ bản cần Supabase Auth và database. Trợ lý AI, nhập ảnh/PDF và xóa tài khoản sau thời gian chờ còn cần triển khai Edge Functions, secrets và tác vụ máy chủ tương ứng. Tham khảo `backend/README.md`, `backend/ASSISTANT_SETUP.md` và `backend/ACCOUNT_DELETION_SETUP.md`.
 
@@ -298,7 +298,7 @@ flutter analyze
 Kiểm thử backend giả lập:
 
 ```bash
-node --test backend/tests/study_assistant_groq.test.mjs
+node --test backend/tests/study_assistant_groq.test.mjs backend/tests/import_timetable_groq.test.mjs
 ```
 
 Kiểm thử Flutter bao phủ các phần như quy tắc lịch lặp, thống kê, đồng bộ, xác thực, tài khoản, biên tập lịch và tương tác giao diện. Kiểm thử backend giả lập không gọi dịch vụ Supabase/Groq thật; các luồng tích hợp vẫn cần được kiểm tra trên project staging với tài khoản thử nghiệm.

@@ -1054,8 +1054,7 @@ class _AssistantOverlayState extends State<AssistantOverlay> {
                             minimumSize: const Size(42, 42),
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(13))),
-                        icon: const Icon(Icons.add_photo_alternate_outlined,
-                            size: 21)),
+                        icon: const Icon(Icons.add, size: 21)),
                     const SizedBox(width: 8),
                     Expanded(
                         child: Align(
